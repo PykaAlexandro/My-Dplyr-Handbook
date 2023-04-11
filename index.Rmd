@@ -1,0 +1,118 @@
+---
+title: "disclaimer"
+author: ""
+date: ""
+output: 
+  html_document
+---
+
+THIS SITE IS STILL A WORK IN PROGRESS
+
+# - *MOTIVATION*
+
+This site started after the release of dplyr 1.0.0 in 2020, in the form of a Rmarkdown where I noted down the changes from previous versions.
+
+During the years that Rmarkdown grow bigger and bigger, both in size and in scope, not being anymore a changelog of updates but also containing the basics of various functions.
+
+At the end of 2022 I decided to restructure the file, to give it more utility and also to ease its consultation. The end result of that process is this site, as along the weeks I decided to be very throughout and detailed about all the functions that exist in dplyr.
+
+It was both a way to challenge me in producing helpful technical resources in a language that is not my mother tongue, and to further my knowledge of dplyr and of R at a large, as I feel that is the main tool for a Data Analyst like myself.
+
+This site went through many revisions and verification, still some mistakes can always occur. I apologize if those will cause troubles, or if my exposition is not the best. 
+
+# - *INTENDED AUDIENCE*
+
+The intended audience was... myself, as I planned to use this blog as a personal reference guide when I have doubts.
+
+Writing it though I was as well imagining a reader that has little knowledge about dplyr (and Data Analysis) as a whole and wants to deepen their acquaintance with the package.
+
+It is my way to give back to the community, to which I am extremely grateful as it was thanks to others people teaching that I could land my first job in the Data Analysis field.
+
+This site is not a course though, as in every page I may use concepts explained in some other pages so for somebody that wants to learn dplyr from 0 I feel that this would not be the best place to start.
+
+# - *STYLE*
+
+With that intended audience in mind, I strove to be as clear and intelligible as possible, through the following means:  
+- one information/concept at a time  
+- an easy example after every information/concept provided  
+- using the same variables in different examples   
+- common language instead of technical one, like I always used column and row instead of variable and observation, never x and y when referring to objects and so on and so forth.
+
+About the site's visual presentation, I kept it simple and clean, also because I didn't nor don't want to spend too much time on it.
+
+# - *MISSING TOPICS*
+
+joining functions
+remote tables verbs https://dplyr.tidyverse.org/reference/index.html#remote-tables
+
+# - *THE DATA FRAME*
+
+I always used the same data frame for all the examples provided, as I think that keeping that as a constant reduce the cognitive load when learning new concepts.
+
+The data frame I used can be found here:
+https://archive.ics.uci.edu/ml/datasets/Online+Retail+II
+
+and I chose it primarily for a personal convenience as I was already using it for another project of mine. METTERE LINK
+
+# - *SHORTCOMINGS*
+
+IMPAGINAZIONE
+
+mettere virgolette attorno a tutte le funzioni e colonne di df, anche per pkgs 
+modificare le liste come ho fatto per across.html?
+
+
+ultimo controllo certosino
+filter()
+relocate()/rename() when grouped
+
+stackoverflow
+numero dei gruppi NON PER rowwise()/nest_by() -> stackoverflow
+
+
+-in filter/group_by/utility_functions/across_pick viene troppo lungo e non si riesce a scrollare fino in fondo -> menu superiore a scomparsa? (_site.yml) toc_float: true?
+
+```{r}
+# df %>%
+#   filter(StockCode == "90081B") %>% #per questo in slice_max non funziona la freccina
+#   slice_max(`Customer ID`, n = 3)
+```
+```{r}
+# df %>%
+#   count(across(everything())) %>% #COME MAI NON MI SUGGERISCE pick() QUI?
+#   filter(n > 1)
+```
+
+
+ATTENZIONE CHE <DATA-MASKING> NON VIENE RENDERATO, CONTROLLARE
+
+R-MARKDOWN
+poter copiare il codice con un click (klippy)
+aumentare dimensione df?
+print() carino in mezzo a pipe
+spazio bianco in fondo
+un solo readxl (ho provato con cache ma non funziona) e info_paged per tutti i markdown?
+
+CONTENUTI (+memorandum, interesting, etc. etc.)
+-arrange esempio in group_by bisogna scrollare le colonne per vederlo?
+-group_by ricontrollo implicit and explicit, 553 dopo count()
+-coalesce deve essere stessa classe? problema in dubbi.R
+-bind aggiungere names repair in bind_cols
+
+GIT
+capire Force Push
+devo fare Build in RStudio ogni volta che aggiorno?
+
+# - *ACKOWNLEDGEMENTS*
+
+shafee stackoverflow
+
+# - *CONTACTS INFORMATION*
+
+# - *LICENSE OF USE/TERMS OF AGREEMENT*
+
+DEVO SCEGLIERE LA LICENZA, ANCHE PER LE REPO SU GITHUB 
+
+# - *LAST UPDATE & FUTURE ENDEVOURS*
+
+This site was last updated on the xx of xxx 2023, using the x.x.x version of dplyr

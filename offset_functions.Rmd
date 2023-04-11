@@ -1,0 +1,239 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+# - *fundamentals* 
+
+Another family of window functions is the offset one, comprised of `lag()` and `lead()`, whose functionality is to shift the values of one vector in one direction.
+
+```{r, df_print = "paged"}
+(x <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+lag(x)
+lead(x)
+```
+
+More specifically, `lag()` "pushes" the values forward while `lead()` "pulls" them back.
+Notice how `lag()` creates an NA at the beginning and removes the last value 10 while `lead()` creates it at the end and removes the first value 1.
+
+About NAs and +/- Inf, they are not ignored.
+
+```{r, df_print = "paged"}
+lag(c(x, NA, 24, Inf, 77, 66))
+```
+
+# - *default* 
+
+We can use the `default` argument to change what values, instead of NAs, created elements will have.
+
+```{r, df_print = "paged"}
+lag(x, default = -Inf)
+lead(x, default = Inf)
+```
+
+The value inserted must be of the same class of the vector though.
+
+```{r, error = TRUE, df_print = "paged"}
+lag(x, default = "missing")
+```
+
+# - *n* 
+
+In case we want to shift by an amount greater than 1 we can use the `n` argument.
+`n` must always be a positive integer.
+
+```{r, df_print = "paged"}
+lag(x, n = 2)
+```
+
+# - *order_by* 
+
+The last argument is `order_by`, which offsets by an order different than the one of the rows indexes.
+
+Here an example with the order reversed, which is the same as if we used `lead()` because we just changed the direction of the shift.
+
+```{r, df_print = "paged"}
+rev_order <- sort(x, decreasing = TRUE)
+```
+```{r}
+tibble(x, 
+       lag(x), 
+       rev_order, 
+       lag(x, order_by = rev_order), 
+       lead(x))
+```
+
+And here a more mind bending example,
+
+```{r, df_print = "paged"}
+scrambled_order <- sample(x, 10)
+```
+```{r}
+tibble(x, 
+       lag(x), 
+       scrambled_order, 
+       lag(x, order_by = scrambled_order))
+```
+
+that becomes clearer if we sort the vector by the new order, showing that using `order_by` we first rearrange by the vector provided and then we offset.
+
+```{r}
+tibble(x, 
+       scrambled_order, 
+       lag(x, order_by = scrambled_order)) %>%
+  arrange(scrambled_order)
+```
+
+# - *usage with a data frame*
+
+With a data frame, offsets functions are particularly useful if we have variations of values through time.
+
+```{r}
+(df_offset <- df %>%
+   mutate(Invoice_Day = as.Date(df$InvoiceDate)) %>%
+   count(Invoice_Day, wt = Quantity, name = "Total_Quantity"))
+```
+
+We can then extract information like the amount of variation
+
+```{r}
+df_offset %>%
+  mutate(Previous_Total_Quantity = lag(Total_Quantity),
+         Delta_Quantity = Total_Quantity - Previous_Total_Quantity)
+```
+
+or preserving only the rows where `Total_Quantity` increased from the previous time stamp.
+
+```{r}
+df_offset %>%
+  mutate(Previous_Total_Quantity = lag(Total_Quantity)) %>%
+  filter(Total_Quantity > lag(Total_Quantity))
+```
+
+So in general using offsets functions allows us to compare the values in one row with the values of previous or following ones.
+
+We can also use them to know when a stock code has changed `Price` for example.
+
+```{r}
+df %>%
+  filter(StockCode == "10002")
+df %>%
+  filter(StockCode == "10002") %>%
+  filter(Price != lag(Price))
+```
+
+Using `lag()` in the previous example we only preserve the rows where `Price` has changed from the one prior.
+Using `lead()` instead we show the rows before `Price` changes.
+
+```{r}
+df %>%
+  filter(StockCode == "10002") %>%
+  filter(Price != lead(Price))
+```
+
+In this way we keep the starting price as a reference but I feel that using `lag()` is more correct.
+
+# - *with group_by()*
+
+In case we want to generalize to all stock codes we can create a grouped data frame to have `lag()` working independently for each group.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  mutate(Previous_Price = lag(Price), .keep = "used") %>%
+  filter(Price != Previous_Price)
+df %>%
+  group_by(StockCode) %>%
+  mutate(Previous_Price = lag(Price), .keep = "used") %>%
+  filter(Price != Previous_Price) %>%
+  arrange(StockCode)
+```
+
+Not grouping the data frame and using `order_by` or arranging before filtering is not correct as `lag()` will shift the last `Price` value of a stock code as the first `Price` value of the following one, so `filter()` will compare the price of two different items.
+
+```{r}
+df %>%
+  filter(Price != lag(Price, order_by = StockCode))
+df %>%
+  arrange(StockCode) %>%
+  filter(Price != lag(Price))
+```
+
+Instead of `filter()` we can use `mutate()`, to have a column with the previous values, with NAs for the first occurrence of all the unique values of the grouping column.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  mutate(Lag_Price = lag(Price), .keep = "used")
+```
+
+In case of more than one grouping column we will have NAs for every first occurrence of all the existing combinations of the columns.
+
+```{r}
+df %>%
+  group_by(StockCode, Country) %>%
+  mutate(Lag_Price = lag(Price), .keep = "used")
+```
+
+Here row 94 has an NA where in the previous example it didn't, that is because
+it is the first occurrence for the combination of stock code 22138 with United Kingdom.
