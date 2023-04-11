@@ -1,0 +1,611 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+data-masking
+
+# - *summarise()*
+
+`summarise()`, when used with an aggregate function (i.e. a function that computes multiple values into a single output), compresses all the data frame into the single value returned by the calculation. 
+
+```{r}
+df %>%
+  summarise(Avg_Price = mean(Price))
+```
+
+Notice the difference with `mutate()` that instead adds a column with the same value repeated for all the rows.
+
+```{r}
+df %>%
+  mutate(Avg_Price = mean(Price))
+```
+
+With vectorized operations the output is not really different from `mutate()`, besides returning only one column.
+
+```{r}
+df %>%
+  summarise(Price_Eur = Price * 1.14)
+df %>%
+  mutate(Price_Eur = Price * 1.14)
+```
+
+This applies to window functions as well.
+
+```{r}
+df %>%
+  summarise(Price_Rank = dense_rank(desc(Price)))
+df %>%
+  mutate(Price_Rank = dense_rank(desc(Price)))
+```
+
+Some warnings were issued because, when the manipulation returns more than one value per group (in those examples the group is one, the whole data frame, so it should return just one value), it is advised to use `reframe()` instead.
+
+# - *with group_by()*
+
+When used on a grouped data frame `summarise()` will return one value per group when using an aggregate function.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  summarise(Avg_Price = mean(Price))
+```
+
+With vectorised operations and window functions we may have more than one row per group (hence the warnings again) and, differently from the ungrouped case, it will return the grouping columns as well.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  summarise(Price_Eur = Price * 1.14)
+df %>%
+  group_by(StockCode) %>%
+  summarise(Price_Rank = dense_rank(desc(Price)))
+```
+
+Notice how in the last three examples the output is ordered by the grouping columns and that the first one returns an ungrouped data frame while the others don't.
+
+This is another property of `summarise()`: removing the most recent grouping column when the groups in the output are of size one (meaning that they consist of only one row).
+
+```{r}
+df %>%
+  group_by(`Customer ID`, Invoice) %>%
+  summarise(N_Rows_per_Invoice = n())
+```
+
+This allows to easily compute with different groupings in the same pipe, like in the following example, where we needed both the `Customer` and `Invoice` column for the first computation and then only `Customer ID` for the second one.
+
+```{r}
+df %>%
+  group_by(`Customer ID`, Invoice) %>%
+  summarise(N_Rows_per_Invoice = n()) %>%
+  mutate(N_Rows_per_Customer = sum(N_Rows_per_Invoice))
+```
+
+This behavior makes sense because, after a `summarise()` call, the usefulness of the most recent grouping column is not very high, as it usually only identifies one row, and therefore keeping the original grouping structure could impede subsequent calculations.
+
+```{r}
+df %>%
+  group_by(`Customer ID`, Invoice) %>%
+  summarise(N_Rows_per_Invoice = n()) %>%
+  group_by(`Customer ID`, Invoice) %>%
+  mutate(N_Rows_per_Customer = sum(N_Rows_per_Invoice))
+```
+
+This behavior never constitutes a problem if we are using `summarise()` for counting or summing, like in the previous examples.
+
+But it can produce erroneous results in other instances, like if we are for example averaging because the mean of several means
+
+```{r}
+df %>%
+  group_by(`Customer ID`, Invoice) %>%
+  summarise(Avg_Quantity_per_Invoice = mean(Quantity))
+df %>%
+  group_by(`Customer ID`, Invoice) %>%
+  summarise(Avg_Quantity_per_Invoice = mean(Quantity)) %>%
+  summarise(Avg_Quantity_per_Customer = mean(Avg_Quantity_per_Invoice))
+```
+
+is not always necessarily equal to the overall unmediated mean. 
+
+```{r}
+df %>%
+  group_by(`Customer ID`) %>%
+  summarise(Avg_Quantity_per_Customer = mean(Quantity))
+```
+
+So it is better to directly calculate the overall mean without intermediate steps, like in the latest example.
+
+## - *.groups*
+
+There is a `.groups` argument that controls the behavior of removing the most recent grouping, and it has two defaults based on the number of rows, in the output, for each group:  
+with `drop_last` we remove the most recent grouping and it is the default if all groups have only one row  
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  summarise(Price_Quantile_Value = quantile(Price, 0.25), prob = 0.25)
+```
+
+`keep` maintains the grouping and it is the default if the groups are bigger than one row.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  summarise(Price_Quantile_Value = quantile(Price, c(0.25, 0.75)), prob = c(0.25, 0.75))
+```
+ 
+Again, it is not advised to have `summarise()` returning more than one value per group but to use `reframe()` instead. 
+ 
+Then we have:  
+`drop`, that removes all the groups, so it can be used to not have another line with `ungroup()` afterwards  
+ 
+```{r}
+df %>%
+  group_by(StockCode, Country) %>%
+  summarise(Avg_Price = mean(Price), .groups = "drop")
+```
+ 
+and `rowwise`, that creates a data frame where every row is a group, useful when we want to apply functions to values on the same row.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  summarise(Avg_Price = mean(Price),
+            Median_Price = median(Price), .groups = "rowwise") %>%
+  mutate(Highest_Price = max(Avg_Price, Median_Price))
+```
+
+I stress that I wrote functions, because with vectorized arithmetic operations `rowwise` is not needed.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  summarise(Avg_Price = mean(Price), 
+            Median_Price = median(Price), .groups = "rowwise") %>%
+  mutate(Price_Diff = Avg_Price - Median_Price)
+df %>%
+  group_by(StockCode) %>%
+  summarise(Avg_Price = mean(Price), 
+            Median_Price = median(Price)) %>%
+  mutate(Price_Diff = Avg_Price - Median_Price)
+```
+
+It is important  as well to emphasize that the `.groups` argument modifies the data frame after the calculation is performed.
+
+As it happened in some of our examples, if we don't specify the `.groups` argument, we get messages about the current state of grouping if one is still present after the `summarise()` call.
+
+```{r, eval = FALSE, df_print = "paged"}
+`summarise()` has grouped output by 'StockCode'. You can override using the
+`.groups` argument.
+```
+
+# - *.by*
+
+tidy-select
+
+Instead of using `group_by()`, we can use use the `.by` argument to perform manipulations on a grouped data frame.
+
+```{r}
+df %>%
+  summarise(Avg_Price = mean(Price), .by = Country)
+```
+
+The first difference is that the output is not ordered by the grouping columns.
+Another one is that `.by` always returns an ungrouped data frame also when using two columns (to be specified with a tidy-select syntax).
+
+```{r}
+df %>%
+  summarise(Avg_Price = mean(Price), .by = c("Country", "StockCode"))
+```
+
+# - *useful functions*
+
+Let's take a look now at some of the functions we can use `summarise()` with:
+
+```{r, eval = FALSE, df_print = "paged"}
+Center: mean(), median()
+Spread: sd(), IQR(), mad()
+Range: min(), max(), quantile()
+Position: first(), last(), nth()
+Count: n(), n_distinct()
+Logical: any(), all()
+```
+
+## - *mean() & median()*
+
+For the central tendency of a distribution of values we can use the aggregate functions `mean()` and `median()`.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  summarise(Avg_Price = mean(Price),
+            Median_Price = median(Price))
+```
+
+## - *sd(), IQR() & mad()*
+
+Likewise we have functions for measures of dispersion like the standard deviation and the range, so with `summarise()` we can easily construct custom summary tables of our liking.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  summarise(St_Dev_Price = sd(Price),
+            Price_Range = max(Price) - min(Price))
+```
+
+## - *first(), last() & nth()*
+
+We can access the first, last and nth element of a group with the position wrappers `first()`, `last()` and `nth()`.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(First_Item = first(Description),
+            Fifth_Item = nth(Description, 5),
+            Last_Item = last(Description))
+```
+
+They possess three optional arguments: `order_by`, to change the order by which we count positions,
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(Fifth_Item = nth(Description, 5),
+            Fifth_Item_New_Order = nth(Description, 5, order_by = StockCode))
+```
+
+`default`, in case we specify an absent position (its preset value is NA)
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(Fifth_Item = nth(Description, 5),
+            Fifth_Item_New_Default = nth(Description, 5, default = "missing"))
+```
+
+and `na_rm`, to remove NAs when counting the positions (as no invoice with an NA in `Description` has more than one row, we won't experience any changes in this example).
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(Fifth_Item = nth(Description, 1),
+            Fifth_Item_No_NAs = nth(Description, 1, na_rm = TRUE))
+```
+
+## - *n() & n_distinct()*
+
+`n()`, to be used without an argument, returns the size as in the number of rows while `n_distinct()` the number of unique values of a column.
+
+```{r}
+df %>%
+  group_by(`Customer ID`) %>%
+  summarise(N_Invoice_Lines_per_Customer = n(),
+            N_Unique_Items_per_Customer = n_distinct(StockCode))
+```
+
+When using `n()` NAs can make part of the grouping columns.
+
+```{r}
+df %>%
+  group_by(`Customer ID`) %>%
+  summarise(N_Invoice_Lines_per_Customer = n()) %>%
+  arrange(desc(N_Invoice_Lines_per_Customer))
+```
+
+`n_distinct()` can remove them from the count with `na.rm`.
+
+```{r}
+df %>%
+  filter(Invoice == "489521")
+df %>%
+  filter(Invoice == "489521") %>%
+  summarise(N_Unique_Items_per_Customer = n_distinct(Description)) 
+df %>%
+  filter(Invoice == "489521") %>%
+  summarise(N_Unique_Items_per_Customer = n_distinct(Description, na.rm = TRUE)) 
+```
+
+`n_distinct()` supports multiple columns as well and in this case it will return the number of unique combinations between them.
+
+```{r}
+df %>%
+  filter(Invoice == "489434")
+df %>%
+  filter(Invoice == "489434") %>%
+  summarise(N_Unique_StockCode_Description = n_distinct(StockCode, Description))
+```
+
+This can be useful to spot repetitions when that number is different from the number of rows.
+
+```{r}
+df %>%
+  filter(Invoice == "489488") %>%
+  arrange(StockCode, Description)
+df %>%
+  filter(Invoice == "489488") %>%
+  summarise(N_Unique_StockCode_Description = n_distinct(StockCode, Description))
+df %>%
+  group_by(Invoice) %>%
+  summarise(N_Rows_per_Invoice = n(),
+            N_Unique_StockCode_Description = n_distinct(StockCode, Description)) %>%
+  filter(N_Rows_per_Invoice != N_Unique_StockCode_Description)
+```
+
+## - *any() & all()*
+
+Lastly, `any()` and `all()` are two functions that evaluate logical vectors, returning one single value as the output.  
+If any of the elements of the vector is TRUE, `any()` returns TRUE.
+
+```{r, df_print = "paged"}
+(x <- c(1, 2, 3))
+x > 2
+any(x > 2)
+```
+
+If none is, it returns FALSE.
+ 
+```{r, df_print = "paged"}
+x > 3
+any(x > 3)
+```
+
+If all the elements are TRUE, `all()` returns TRUE,
+
+```{r, df_print = "paged"}
+x > 0
+all(x > 0)
+```
+
+and if there is just one FALSE, it returns FALSE.
+
+```{r, df_print = "paged"}
+x > 1
+all(x > 1)
+```
+
+It is like `any()` chains many OR expressions,
+
+```{r, df_print = "paged"}
+any(x > 2)
+1 > 2 | 2 > 2 | 3 > 2
+any(x > 3)
+1 > 3 | 2 > 3 | 3 > 3
+```
+
+while `all()` many AND ones.
+
+```{r, df_print = "paged"}
+all(x > 0)
+1 > 0 & 2 > 0 & 3 > 0
+all(x > 1)
+1 > 1 & 2 > 1 & 3 > 1
+```
+
+As they compress one vector into one value, `any()` and `all()` work well with the akin function `summarise()` on grouped data frames.
+
+For example we may want to know which invoices have at least one stock code with a `Price` higher than 5, 
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(One_Price_Higher_5 = any(Price > 5))
+```
+
+or the ones that have all of the stock codes with a `Price` higher than 5.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(All_Prices_Higher_5 = all(Price > 5))
+```
+
+We remind the outputs of the interactions between NAs and the logical constants TRUE and FALSE in OR statements.
+
+```{r, df_print = "paged"}
+NA | TRUE 
+NA | FALSE
+```
+
+Because the vectors we evaluate can sometimes have NAs,
+
+```{r, df_print = "paged"}
+(xNA <- c(1, 2, 3, NA))
+xNA > 3
+```
+
+so in case we apply `any()` on a vector with FALSEs and NAs we can get an NA instead of FALSE,
+
+```{r, df_print = "paged"}
+any(xNA > 3)
+```
+
+With `all()` instead, an NA could prevent it to output TRUE.
+
+```{r, df_print = "paged"}
+NA & TRUE
+NA & FALSE
+xNA > 0
+all(xNA > 0)
+```
+
+That could be a problem with `summarise()` when the columns we are evaluating have NAs in them,
+
+```{r}
+df %>%
+  rows_append(tibble(Invoice = "489435")) %>%
+  arrange(Invoice, !is.na(StockCode))
+```
+
+as that could modify the desired output.
+
+```{r}
+df %>%
+  rows_append(tibble(Invoice = "489435")) %>%
+  group_by(Invoice) %>%
+  summarise(One_Price_Higher_5 = any(Price > 5))
+```
+
+To prevent that, we can use the `na.rm` argument, available for both `any()` and `all()`.
+
+```{r}
+df %>%
+  rows_append(tibble(Invoice = "489435")) %>%
+  group_by(Invoice) %>%
+  summarise(One_Price_Higher_5 = any(Price > 5, na.rm = TRUE))
+```
+
+Exploiting the properties of TRUE and FALSE (that evaluate to 1 and 0 in calculations),
+
+```{r, df_print = "paged"}
+TRUE + TRUE
+TRUE + FALSE
+```
+
+we can also use `any()` and `all()` to create tables with counts and proportions.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(One_Price_Higher_100 = any(Price > 100))
+df %>%
+  group_by(Invoice) %>%
+  summarise(One_Price_Higher_100 = any(Price > 100)) %>%
+  summarise(`Tot # Invoices` = n(),
+            `# Invoices with Expensive Items` = sum(One_Price_Higher_100),
+            `% Invoices with Expensive Items` = formattable::percent(mean(One_Price_Higher_100)))
+```
+
+Counts and proportions of logical values can be done also without `any()` and `all()` if we feed a conditional statement into `sum()` or `mean()` (pay attention that the two examples don't and are not meant to return the same output).
+
+```{r}
+df %>%
+  summarise(Tot_N_Invoices = n_distinct(Invoice),
+            N_Expensive_Items = sum(Price > 100),
+            Prop_of_Expensive_Items = mean(Price > 100))
+```
+
+Another use of `summarise()` it to have the same calculation performed on two different sets thank to inline subsetting.
+
+```{r}
+df %>%
+  summarise(Avg_Quantity = mean(Quantity),
+            Avg_Positive_Quantity = mean(Quantity[Quantity > 0]))
+```
+
+That doesn't need to be done on the same column.
+
+```{r}
+df %>%
+  summarise(N_Invoices = n_distinct(Invoice),
+            N_Invoices_Positive_Quantity = n_distinct(Invoice[Quantity > 0]))
+```
+
+# - *reframe()*
+
+data-masking
+
+We've seen examples where `summarise()` returns more than one value per group.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  summarise(Price_Quantile_Value = quantile(Price, c(0.25, 0.75)), prob = c(0.25, 0.75))
+```
+
+We received a warning because for these kinds of operations it is advised to use `reframe()`.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  reframe(Price_Quantile_Value = quantile(Price, c(0.25, 0.75)), prob = c(0.25, 0.75))
+```
+
+`reframe()` and `summarise()` function very similarly, one difference is that the former always returns an ungrouped data frame, even if the grouping columns are more than one (it doesn't have a `.groups` argument then).
+
+```{r}
+df %>%
+  group_by(StockCode, Country) %>%
+  reframe(Price_Quantile_Value = quantile(Price, c(0.25, 0.75)), prob = c(0.25, 0.75))
+```
+
+So we might want to use it also with manipulations that return only one row if we want an ungrouped data frame as the output.
+
+```{r}
+df %>%
+  group_by(StockCode, Country) %>%
+  reframe(Price_Quantile_Value = quantile(Price, 0.25, prob = 0.25))
+df %>%
+  group_by(StockCode, Country) %>%
+  summarise(Price_Quantile_Value = quantile(Price, 0.25, prob = 0.25))
+```
+
+## - *.by*
+
+tidy-select
+
+Using `.by` will keep the original rows order.
+
+```{r}
+df %>%
+  reframe(Price_Quantile_Value = quantile(Price, c(0.25, 0.75)), prob = c(0.25, 0.75), .by = c("StockCode", "Country"))
+```

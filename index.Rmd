@@ -1,0 +1,75 @@
+---
+title: ""
+author: ""
+date: ""
+output: 
+  html_document
+---
+
+# - *MOTIVATION*
+
+This site started after the release of `dplyr` 1.0.0 in 2020, in the form of a Rmarkdown where I noted down the changes from previous versions.
+
+During the years that Rmarkdown grew bigger and bigger, both in size and in scope, not being anymore a changelog of updates but also containing the basics of various functions.
+
+At the end of 2022 I decided to restructure the file, to give it more utility and also to ease its consultation. The end result of that process is this site, as along the weeks I decided to be very throughout and detailed about all the functions that exist in the package.
+
+It was both a way to challenge myself in producing helpful technical resources in a language that is not my mother tongue and to further my knowledge of `dplyr` and of `R` at large, as I feel that it is the main tool for a Data Analyst like myself.
+
+This site went through many revisions and verification, still mistakes and typos can always occur. I apologize if those will cause troubles, or if my general elaboration is not sufficiently clear for a complete understanding of the subjects discussed. 
+
+# - *INTENDED AUDIENCE*
+
+The intended audience was... myself, as I planned to use this blog as a personal reference guide for when I have doubts.
+
+Writing it though I was as well imagining a reader that has little knowledge about `dplyr` and wants to deepen their acquaintance with the package.
+
+It is my way to give back to the community, to which I am extremely grateful as it was thanks to similar efforts of others that I could land my first job in the Data Analysis field.
+
+This site is not a course though, as in every page I may use concepts explained in some other pages so for somebody that wants to learn `dplyr` from 0 I feel that this would not be the best place to start.
+
+# - *STYLE*
+
+With that intended audience in mind, I strove to be as clear and intelligible as possible, through the following means:  
+- one information/concept at a time  
+- an easy example after every information/concept provided  
+- using the same variables in different examples   
+- common language instead of technical one, like I always used column and row instead of variable and observation, never x and y when referring to objects and so on and so forth.
+
+About the site's visual presentation, I kept it simple and clean, also because I didn't nor don't want to spend too much time on it.
+
+# - *MISSING TOPICS*
+
+I did not address remote table verbs (https://dplyr.tidyverse.org/reference/index.html#remote-tables) and joining functions (https://dplyr.tidyverse.org/articles/two-table.html).   
+For the latter, that is because `dplyr` 1.1.0 introduced many changes that I feel I need more working experience to be comfortable discussing them.
+
+# - *THE DATA FRAME*
+
+I always used the same data frame for all the examples provided, as I think that keeping that as a constant reduce the cognitive load when learning new concepts.
+
+The data frame I used can be found here:
+https://archive.ics.uci.edu/ml/datasets/Online+Retail+II
+
+and I chose it primarily for a personal convenience as I was already using it for another project of mine.
+
+# - *SHORTCOMINGS*
+
+In some pages (the one for `filter()` for example) the side menu has too many elements, so the last ones can't be accessed and the only solution is to scroll to the end of the page. I apologize for that.
+ 
+# - *ACKOWNLEDGEMENTS*
+
+I thank https://github.com/shafayetShafee that provided me with the code necessary to show groups information for printed data frames.
+
+# - *CONTACTS INFORMATION*
+
+For any comment, critique or suggestion you can contact me on my linkedin profile.
+
+# - *LAST UPDATE*
+
+This site was last updated on the 27th of August 2023, using the 1.1.2 version of `dplyr`.   
+
+I don't know if I will keep this site up to date with future `dplyr` releases (that you can check here https://dplyr.tidyverse.org/news/index.html), it will depend on current commitments and interests. 
+
+# - *FUTURE ENDEVOURS*
+
+Despite requiring a lot of effort, working on this site was really engaging, instructive and rewarding. I can see challenging myself again with other topics, first and foremost `gpplot2`, but for when and if I don't know at this moment in time. 

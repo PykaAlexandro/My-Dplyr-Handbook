@@ -1,0 +1,610 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+data-masking
+
+# - *fundamentals*
+
+with `slice()` we can specify one or several row indexes and the function will preserve the relative rows.
+
+```{r}
+df %>%
+  slice(5)
+df %>%
+  slice(5, 6)
+```
+
+If we want to preserve an interval of rows we can use a colon (`:`).
+
+```{r}
+df %>%
+  slice(5:10)
+```
+
+If the interval specified exceeds the total number of rows, `slice()` will not throw an error.
+
+```{r}
+df %>%
+  slice(500000:1000000)
+```
+
+`slice()` is equivalent to the following expressions (which must be used in case of relational databases).
+
+```{r}
+df %>%
+  filter(row_number() == 5)
+df %>%
+  filter(row_number() %in% c(5, 6))
+df %>%
+  filter(row_number() %in% 5:10)
+df %>%
+  filter(row_number() %in% 500000:1000000)
+```
+
+`slice()` is very versatile and can perform several additional actions:
+
+- remove one or several rows with the use of a minus (`-`)
+
+```{r}
+df %>%
+  slice(-5)
+df %>%
+  slice(-5, -6)
+df %>%
+  slice(-(5:10))
+```
+
+- change the order of the output
+
+```{r}
+df %>%
+  slice(10:5)
+```
+
+or duplicate rows,
+
+```{r}
+df %>%
+  slice(7, 7, 7, 7)
+```
+
+even with complex expressions,
+
+```{r}
+df %>%
+  slice(rep(c(1, 2, 3), c(1, 2, 4)))
+```
+
+as long as all the input indexes have all the same sign though.
+
+```{r, error = TRUE}
+df %>%
+  slice(7, 7, 7, -7)
+```
+
+- by using `n()` (or `nrow(df)`, it is indifferent here), we can preserve or remove the last row or a number of rows from the bottom.
+
+```{r}
+df %>%
+  slice(n())
+df %>%
+  slice(-n())
+df %>%
+  slice(525000:n())
+df %>%
+  slice(-(525000:n()))
+df %>% 
+  slice(1:(n() - 462))
+```
+
+As we've seen in all of these examples, if a row index is present in the expression, that row index is preserved (or removed when we used a `-`).
+
+```{r}
+df %>%
+  slice(5:10)
+```
+
+We can think of it as if `slice()` uses >= / <= like `between()`.
+
+```{r}
+df %>%
+  filter(between(row_number(), 5, 10))
+```
+
+Furthermore, as `slice()` is a data-masking function, it is possible to provide the indexes with calculations or with the output of a function, like we did in some of the previous examples.
+
+```{r}
+df %>%
+  slice(c(2, 4, 6, 8) / 2)
+df %>%
+  slice(seq(1, 8, by = 2))
+```
+
+With no argument, `slice()` returns an empty data frame.
+
+```{r}
+df %>%
+  slice()
+```
+
+`slice()` has many helpers that can streamline the code in particular cases:
+
+# - *slice_head() & slice_tail()*
+
+`slice_head()` and `slice_tail()` respectively preserve the first and last `n` rows. `n` must be an integer.
+
+```{r}
+df %>%
+  slice_head(n = 5)
+df %>%
+  slice_tail(n = 5)
+```
+
+Keep in mind that `n` must always be explicit with the helpers.
+
+```{r, error = TRUE}
+df %>%
+  slice_head(5)
+```
+
+While `slice()` would throw an error if we used it.
+
+```{r, error = TRUE}
+df %>%
+  slice(n = 5)
+```
+
+The default is `n` = 1.
+
+```{r}
+df %>%
+  slice_head()
+```
+
+The example with `slice_tail()` can be rewritten like this, but it is surely more convoluted, so the presence of this helper is appreciated.
+
+```{r}
+n <- 5
+df %>%
+  slice((n() - (n - 1)):n())
+```
+
+A similar expression, not possible with `slice_tail()`, could be used though to select a range of row indexes `n` to `n` + `n` counting from the bottom.
+
+```{r}
+df %>% 
+  slice(((n() - (n - 1)) - n):(n() - (n - 1))) 
+```
+
+With `slice_head()` and `slice_tail()` we can also use the `prop` argument (that needs to be explicit, like `n`) to preserve a user defined proportion of rows.
+
+```{r}
+df %>%
+  slice_head(prop = 0.1)
+df %>%
+  slice_tail(prop = 0.1)
+```
+
+The number of rows is rounded down in case of decimals in the output.
+
+```{r}
+df %>%
+  slice_head(prop = 0.6)
+```
+
+
+We can use a minus (`-`), like we do in `slice()`, but the result is counter intuitive in my opinion as `slice_head()` removes the rows at the bottom and `slice_tail()` the ones at the top.
+
+```{r}
+df %>%
+  slice_head(n = -5)
+df %>%
+  slice_tail(n = -5)
+df %>%
+  slice_head(prop = -0.1)
+df %>%
+  slice_tail(prop = -0.1)
+```
+
+# - *slice_sample()*
+
+`slice_sample()` samples a number or a percentage of rows.
+Like with the previous helpers, `n` and `prop` must always be explicit, `n` an integer and the number of rows is rounded down if the output contains decimals when using `prop`.
+
+```{r}
+df %>%
+  slice_sample(n = 5)
+df %>%
+  slice_sample(prop = 0.1)
+```
+
+The default is again `n` = 1.
+
+```{r}
+df %>%
+  slice_sample()
+```
+
+In case we want to remove random rows, we can provide negative integers to `n` and `prop`.
+
+```{r}
+df %>%
+  slice_sample(n = -5)
+df %>%
+  slice_sample(prop = -0.1)
+```
+
+## - *replace*
+
+The `replace` argument controls whether the sampling occurs without (the default FALSE) or with replacements (which means that a row can be picked more than once).
+
+```{r}
+df %>%
+  slice(1:5)
+df %>%
+  slice(1:5) %>%
+  slice_sample(n = 5, replace = TRUE)
+```
+
+## - *weight_by*
+
+data-masking
+
+If we want to give more representation to a certain segment of the data, we can use the `weight_by` argument, which increases the probability of preserving rows with higher values in the column specified in it.
+
+In this example we weight by the `Price` column, so expensive items will be more present in the output compared to a non weighted sample. We can check it with the `Price_Rank` column, whose lower values indicates a more expensive item.
+
+```{r}
+df %>%
+  filter(Price >= 0) %>%
+  mutate(Price_Rank = dense_rank(desc(Price))) %>%
+  slice_sample(n = 10, weight_by = Price)
+df %>%
+  filter(Price >= 0) %>%
+  mutate(Price_Rank = dense_rank(desc(Price))) %>%
+  slice_sample(n = 10)
+```
+
+Notice the `filter()` call on the column we provide to `weight_by`, as that must be non-negative. We can also use an external vector, as long as it is of the same size as the number of rows of the data frame fed into `slice_sample()`.
+
+We can't in fact use inline subsetting on `weight_by` because it will produce a different one.
+
+```{r, error = TRUE}
+df %>%
+  mutate(Price_Rank = dense_rank(desc(Price))) %>%
+  slice_sample(n = 10, weight_by = Price[Price > 0])
+```
+
+We can use expressions inside `weight_by`.
+
+```{r}
+df %>%
+  filter(Price >= 0) %>%
+  mutate(Price_Rank = dense_rank(desc(Price))) %>%
+  slice_sample(n = 10, weight_by = Price / 2)
+```
+
+# - *slice_max() & slice_min()*
+
+Last helpers, `slice_max()` and `slice_min()` preserve a number of rows with the maximum or minimum values of the column specified in the `order_by` argument, sorting the output as well.
+
+```{r}
+df %>%
+  slice_max(order_by = Quantity, n = 10)
+df %>%
+  slice_min(order_by = Quantity, n = 10)
+```
+
+Being a data-masking argument, `order_by` accepts expressions,
+
+```{r}
+df %>%
+  slice_max(order_by = Quantity / 2, n = 10)
+```
+
+and can be implicit.
+
+```{r}
+df %>%
+  slice_max(Quantity, n = 10)
+```
+
+But `n` cannot,
+
+```{r, error = TRUE}
+df %>%
+  slice_max(Quantity, 10)
+```
+
+and, as with other helpers, its default is 1 and it accepts only integer values.
+
+```{r}
+df %>%
+  slice_max(Quantity)
+```
+
+In the presence of ties all of the rows are preserved and we assume, as with `arrange()`, that the rows are ordered by their original row indexes.
+
+```{r}
+df %>%
+  slice_min(Quantity, n = 4)
+```
+
+To break the ties we can either specify two columns, that must be in a data frame or tibble format, so for example we can use `pick()` to do that,
+
+```{r}
+df %>%
+  slice_min(pick(Quantity, StockCode), n = 4)
+```
+
+## - *with_ties*
+
+or we can set the `with_ties` argument to FALSE, so the function will remove the rows with an output index superior to `n`.
+
+```{r}
+df %>%
+  slice_min(Quantity, n = 4, with_ties = FALSE)
+```
+
+We remind that, within ties, the rows of the output are ordered by their original row index so if we are not satisfied by which row gets removed we can use `arrange()` before slicing, to preserve invoice 530348 instead.
+
+```{r}
+df %>%
+  arrange(desc(InvoiceDate)) %>%
+  slice_min(Quantity, n = 4, with_ties = FALSE)
+```
+
+NAs are included if they are necessary to reach the number specified in `n` or `prop`.
+
+```{r}
+df %>%
+  filter(StockCode == "90081B")
+df %>%
+  filter(StockCode == "90081B") %>%
+  slice_max(`Customer ID`, n = 3)
+```
+
+## - *na_rm*
+
+With `na_rm = TRUE` we can exclude them, it might mean returning less rows than specified in `n` though.
+
+```{r}
+df %>%
+  filter(StockCode == "90081B") %>%
+  slice_max(`Customer ID`, n = 3, na_rm = TRUE)
+```
+
+We can obtain the same results provided by `slice_min()` or `slice_max()` with a combination of `arrange()` plus `slice()`.
+
+```{r}
+df %>%
+  slice_min(Quantity, n = 10)
+df %>%
+  arrange(Quantity) %>%
+  slice(1:10)
+```
+
+Or by using `filter()` with a ranking function.
+The order will be different here as `filter()` preserves the original row index's one.
+
+```{r}
+df %>%
+  filter(row_number(Quantity) <= 10)
+```
+
+If we wrap the variable with `desc()`, we can invert the behavior.
+
+```{r}
+df %>%
+  slice_max(desc(Quantity), n = 10)
+df %>%
+  slice_min(desc(Quantity), n = 10)
+```
+
+As with the other helpers, a proportion of rows can be used as well and they are rounded down in case of decimals.
+
+```{r}
+df %>%
+  slice_max(Quantity, prop = 0.1)
+df %>%
+  slice_min(Quantity, prop = 0.1)
+```
+
+Just like `n`, `prop` must be explicit.
+
+```{r, error = TRUE}
+df %>%
+  slice_min(Quantity, 0.1)
+```
+
+`slice_max()` and `slice_min()` can also be used with other classes of columns:
+
+- with character ones we will rank by the alphabet, as it is defined in your locale.
+
+```{r}
+df %>%
+  slice_min(Description, n = 10)
+```
+
+- with factors by the order of the levels.
+
+```{r}
+df %>%
+  mutate(Description_Factor = factor(Description, levels = sample(unique(df$Description), 
+                                                                  length(unique(df$Description))), ordered = TRUE)) %>%
+  slice_min(Description_Factor, n = 1000)
+```
+
+- with datetime objects it depends on the class, with for example POSIXct will be by the number of seconds since 01/01/1970 (in the UTC time zone) as a numeric vector. This is quite resource heavy so I computed on only the first 100 rows.
+
+```{r}
+df %>%
+  slice(1:100) %>%
+  slice_min(InvoiceDate, n = 10)
+```
+
+A minus before `n` doesn't seem to affect the output.
+
+```{r}
+df %>%
+  slice(21:30)
+df %>%
+  slice(21:30) %>%
+  slice_min(Quantity, n = 5)
+df %>%
+  slice(21:30) %>%  
+  slice_min(Quantity, n = -5)
+```
+
+# - *with group_by() / .by*
+
+`slice()` and its helpers work as expected with grouped data frames, preserving as many specified rows indexes, `n` or `prop` as there are groups. 
+It is important to notice that they rearrange the output by the grouping column, like `summarise()` and unlike `filter()`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  slice(2)
+df %>%
+  group_by(Country) %>%
+  slice_head(n = 5)
+```
+
+As with the ungrouped case, when we use a proportion the number of rows we preserve is rounded down.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  slice(1:5)
+df %>%
+  group_by(Country) %>%
+  slice(1:5) %>%
+  slice_head(prop = 0.5)
+```
+
+And as already seen at the beginning, `slice()` doesn't throw an error if the interval specified crosses over the number of rows.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  slice(11:15)
+```
+
+## - *.preserve*
+
+`slice()` (but not its helpers) has a `.preserve` argument that, when set to TRUE, doesn't recalculate the number of groups when the output doesn't have any rows from a particular one (Lebanon here).
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  slice(15) %>%
+  n_groups()
+df %>%
+  group_by(Country) %>%
+  slice(15, .preserve = TRUE) %>%
+  n_groups()
+```
+
+This is useful if further operations need the original number of groups (notice how Lebanon is present in the output even if it has no rows).
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  slice(15, .preserve = TRUE) %>%
+  summarise(n = n())
+```
+
+Besided `group_by()`, we can also use the `.by` argument to use `slice()` on grouped data frames.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  slice(2)
+df %>%
+  slice(2, .by = Country)
+```
+
+You can see that using `.by` the output maintains the original row order plus the data frame is returned ungrouped.
+
+Another difference is that `.by` uses a tidy-select syntax, to keep in mind if we want to select more than one column.
+
+```{r}
+df %>%
+  slice(2, .by = c("Country", "Customer ID"))
+```
+
+That is an useful feature to employ selection helpers.
+
+```{r}
+df %>%
+  slice(2, .by = starts_with("C"))
+```
+
+The helpers can use this argument as well, but with them it is called `by`.
+
+```{r}
+df %>%
+  slice_head(n = 5, by = Country)
+```

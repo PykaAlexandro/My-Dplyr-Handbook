@@ -1,0 +1,213 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+data-masking
+
+# - *fundamentals*
+
+When there are rows that are repeated,
+
+```{r}
+df %>%
+  filter(Invoice == "496431" & 
+           StockCode == "84826")
+```
+
+`distinct()` removes the ones after the first.
+
+```{r}
+df %>%
+  filter(Invoice == "496431" & 
+           StockCode == "84826") %>%
+  distinct()
+```
+
+So it is useful in data wrangling when we want to remove duplicated rows from a data frame.
+
+```{r}
+df %>%
+  distinct()
+```
+
+It is equivalent to these lines of code,
+
+```{r}
+df %>%
+  group_by(pick(everything())) %>%
+  summarise(n = n()) %>%
+  select(-n) %>%
+  ungroup()
+df %>%
+  group_by(pick(everything())) %>%
+  slice(1) %>%
+  ungroup()
+```
+
+but it returns the output much faster.
+
+If we are interested in returning the duplicated rows instead, we can use this procedure with `count()` and `filter()`.
+
+```{r}
+df %>%
+  count(pick(everything()), name = "# of repetitions") %>%
+  filter(`# of repetitions` > 1)
+```
+
+We can also use it on a subset of columns and it will return the unique values, in case of one, and the existing combinations of their values with more than one.
+
+```{r}
+df %>%
+  distinct(Country)
+df %>%
+  distinct(Country, `Customer ID`)
+```
+
+# - *.keep_all*
+
+With `.keep_all = TRUE`, we keep all other columns as well in the output.
+
+```{r}
+df %>%
+  distinct(Country, .keep_all = TRUE)
+df %>%
+  distinct(Country, `Customer ID`, .keep_all = TRUE)
+```
+
+If we don't specify columns, the outputs are equal.
+
+```{r}
+df %>%
+  distinct()
+df %>%
+  distinct(.keep_all = TRUE)
+```
+
+`distinct()` is very similar, beside the added count and the row order of the output, to what `count()` does.
+
+```{r}
+df %>%
+  count(Country)
+df %>%
+  count(Country, `Customer ID`)
+```
+
+NAs are treated as one value.
+
+```{r}
+df %>%
+  distinct(`Customer ID`) %>%
+  arrange(!is.na(`Customer ID`))
+```
+
+So with more than one column they form a combination with the other values.
+
+```{r}
+df %>%
+  mutate(Country = na_if(Country, "Unspecified")) %>%
+  distinct(Country, `Customer ID`) %>%
+  arrange(!is.na(Country),!is.na(`Customer ID`))
+```
+
+We can use `pick()` to simplify the selection of more than one column.
+
+```{r}
+df %>%
+  distinct(pick(starts_with("I")))
+```
+
+It being a data-masking function, we can also use expressions. 
+
+```{r}
+df %>%
+  distinct(Invoice_Day = as.Date(InvoiceDate))
+```
+
+`distinct()` only works with data frames (a single column one included) but not with vectors.
+
+```{r, error = TRUE, df_print = "paged"}
+df %>%
+  pull(Country) %>%
+  distinct()
+distinct(df$Country)
+```
+
+So in cases like these we have to rely on `unique()` from base `R`.
+
+```{r, df_print = "paged"}
+df %>%
+  pull(Country) %>%
+  unique()
+```
+
+# - *with group_by()*
+
+With a grouped data frame, the grouping column is processed as well, as if it was specified first.
+The rows order is kept from `df` and not changed following the grouping columns.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  distinct(`Customer ID`)
+```

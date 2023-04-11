@@ -1,0 +1,295 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo = FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+# - *tidy-select or data-masking*
+
+For every applicable `dplyr` function discussed in this handbook I started its section with either the tidy-select or data-masking enunciation.
+That is an information that can be found in the help page of most functions, under `Arguments`, for` ...`.
+
+tidy-select or data-masking functions differ between each other by the kind of object they accept and it is a difference that is important to know to use each verb correctly. Succinctly put, tidy-select functions accept positions while data-masking ones vectors of values.
+
+Some optional arguments as well work with either a tidy_select (like `.by/by`) or data-masking (like `wt`) syntax.
+
+## - *tidy-select syntax*
+
+tidy-select functions are
+
+```{r, eval = FALSE}
+select()
+rename()
+relocate()
+across()
+pick()
+rowwise()
+c_across()
+pull()
+```
+
+There are also the optional arguments    
+`.before/.after` (for `mutate()`)   
+and `.by/by` ( for `filter()`, `slice()` and its helpers, `mutate()`, `summarise()` and `reframe()`).
+
+These functions work by using indifferently either the name (quoted or unquoted)
+
+```{r}
+df %>%
+  select("Invoice")
+df %>%
+  select(Invoice)
+```
+
+or the position of one or several columns.
+
+```{r}
+df %>%
+  select(1)
+```
+
+It is important to note that, even when we use the name, we are always selecting by the position as using the name is just a way to pinpoint to the position of the column.
+ 
+If we want to change the mapping between names and positions, this will not work as, in case of ambiguity, `dplyr` will give preference to the mapping inside the data frame and not to the external one we specified.
+
+```{r}
+Invoice <- 5
+df %>%
+  select(Invoice)
+```
+
+So if we want to use the externally specified value of `Invoice`, we must for example wrap it with `identity()`.
+
+```{r}
+df %>%
+  select(Invoice, identity(Invoice))
+```
+
+We can also use a name.
+
+```{r}
+InvoiceDate <- "Invoice"
+df %>%
+  select(identity(InvoiceDate))
+```
+
+That applies to selections like the aforementioned `Invoice`, to `Invoice:InvoiceDate`
+
+```{r}
+df %>%
+  select(Invoice:InvoiceDate)
+df %>%
+  select(Invoice:identity(Invoice))
+```
+
+and to` c("Invoice", "InvoiceDate")`.
+
+```{r}
+df %>%
+  select(c("Invoice", "InvoiceDate"))
+df %>%
+  select(c("Invoice", identity(Invoice)))
+```
+
+With selection helpers we can instead freely utilise external definitions.
+
+```{r}
+first_letter <- "I"
+df %>%
+  select(starts_with(first_letter))
+```
+
+If we want to use external vectors we still need to wrap them with `identity()`,  
+
+```{r}
+sel_vars <- c("Invoice", "InvoiceDate")
+df %>%
+  select(identity(sel_vars))
+```
+
+or use either `any_of()`
+
+```{r}
+df %>%
+  select(any_of(sel_vars))
+```
+
+or `all_of()`.
+
+```{r}
+df %>%
+  select(all_of(sel_vars))
+```
+
+Otherwise we will get a warning.
+
+```{r}
+df %>%
+  select(sel_vars)
+```
+
+## - *data-masking syntax*
+
+data-masking functions are 
+
+```{r, eval = FALSE}
+filter()
+arrange()
+slice()
+mutate()
+group_by()
+summarise()
+reframe()
+count()
+add_count()
+distinct()
+```
+
+Then there are also the   
+`weight_by` (for `slice_sample`),   
+`order_by` (for `slice_max()` & `slice_min()`)   
+and `wt` (for `count()`, `add_count()`, `tally()` and `add_tally()`) arguments.
+
+data-masking allows to directly refer to the column inside the data frame we are manipulating,
+
+```{r}
+df %>%
+  mutate(Price_Eur_dplyr = Price * 1.14, .after = "Price")
+```
+
+without the need to specify that the column belongs to `df`, like we would do in base `R` with `$`.
+
+```{r}
+df$Price_Eur_R <- df$Price * 1.14
+df
+```
+
+Notice as well the difference with the `.after` tidy-select argument, that instead needs a name (quoted or unquoted) or a position.
+
+```{r}
+df %>%
+  mutate(Price_Eur_dplyr = Price * 1.14, .after = 6)
+```
+
+As they accept vectors of values, it means that we can feed data-masking functions with expressions,
+
+```{r}
+df %>%
+  filter(as.Date(InvoiceDate) == "2010-04-01")
+```
+
+without the need to initialize a new column beforehand.
+
+```{r}
+df %>%
+  mutate(Invoice_Day = as.Date(InvoiceDate)) %>%
+  filter(Invoice_Day == "2010-04-01")
+```
+
+If we were to feed them with names or positions, they still will be treated as vector of values, therefore recycled, if their length is unitary, to the size of the data frame.
+
+```{r}
+df %>%
+  mutate(Price_Eur_dplyr = "Price_Eur_R", .after = "Price")
+df %>%
+  mutate(Price_Eur_dplyr = 9, .after = "Price")
+```
+
+We would also receive straight up errors if we tried to perform arithmetic operations between strings and numbers.
+
+```{r, error = TRUE}
+df %>%
+  mutate(Price_Eur_Discounted = "Price_Eur_R" - 1)
+```
+
+With data-masking we can use data frame columns and external vectors in the same call.
+
+```{r}
+gbp_usd <- 1.27
+df %>%
+  mutate(Price_Usd = Price * gbp_usd, .after = "Price")
+```
+
+In case an external vector and a data frame column have the same name, the precedence is given to the column,
+
+```{r}
+df %>%
+  mutate(gbp_usd = 2,
+         Price_Usd = Price * gbp_usd, .after = "Price")
+```
+
+unless we give precedence to the external vector with the `.env` pronoun.
+
+```{r}
+df %>%
+  mutate(gbp_usd = 2,
+         Price_Usd = Price * .env$gbp_usd, .after = "Price")
+```
+
+The analogue data frame pronoun is `.data`, in case we want to remove ambiguity on which vector of values we are using.
+
+```{r}
+df %>%
+  mutate(gbp_usd = 2,
+         Price_Usd_.data = Price * .data$gbp_usd,
+         Price_Usd_.env = Price * .env$gbp_usd, .after = "Price")
+```

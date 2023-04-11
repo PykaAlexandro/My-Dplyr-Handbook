@@ -1,0 +1,737 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr) #OPPURE USO include?
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx")) 
+```
+
+data-masking
+
+# - *fundamentals*
+
+`count()` is a wrapper for `group_by() %>% summarise(n = n())` and, like its counterpart, it returns the size, in terms of number of rows, for every group of the data frame.
+
+```{r}
+df %>%
+  count(Country)
+df %>%
+  group_by(Country) %>%
+  summarise(n = n())
+```
+
+As such, it can also be seen as a wrapper for `group_by() %>% tally()` (as `tally()` is a wrapper for `summarise(n = n())`).
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  tally()
+```
+
+But they differ when there is more than one grouping column, as `tally()`, like `summarise()`, removes only the most recent grouping,
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  tally() %>%
+  group_vars()
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  summarise(n = n()) %>%
+  group_vars()
+```
+
+while `count()` ungroups the output even with several columns, saving us from piping an additional `ungroup()`.
+
+```{r, df_print = "paged"}
+df %>%
+  count(Country, `Customer ID`) %>%
+  group_vars()
+```
+
+When we specify more columns, `count()` returns the number of rows for all the unique existing combinations between their values.
+
+```{r}
+df %>%
+  count(Country, `Customer ID`)
+```
+
+Like if we specified two columns in `group_by()`.
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  summarise(n = n())
+```
+
+As with `group_by() %>% summarise(n = n())`, NAs are counted as one value.
+
+```{r}
+df %>%
+  count(`Customer ID`, sort = TRUE)
+df %>%
+  group_by(`Customer ID`) %>% 
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+So with more than one column we can have every existing combination of NAs with other values.
+
+```{r}
+df %>%
+  count(`Customer ID`, Description, sort = TRUE)
+```
+
+Like if we wrote
+
+```{r}
+df %>%
+  group_by(`Customer ID`, Description) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+Being a data-masking function, we can use it with expressions. 
+
+```{r}
+df %>%
+  count(CustomerID = `Customer ID`)
+df %>%
+  count(Price_Rank = dense_rank(Price))
+```
+
+This is equivalent to using those expressions in the `group_by()` calls.
+
+```{r}
+df %>%
+  group_by(CustomerID = `Customer ID`) %>%
+  summarise(n = n())
+df %>%
+  group_by(Price_Rank = dense_rank(Price)) %>%
+  summarise(n = n())
+```
+
+# - *sort*
+
+The `sort` argument can be employed if we want the rows with the largest `n` on top, without having to pipe an `arrange()` call afterwards.
+
+```{r}
+df %>%
+  count(Country, sort = TRUE)
+df %>% 
+  count(Country, `Customer ID`, sort = TRUE)
+```
+
+# - *wt*
+
+data-masking
+
+Another useful argument is `wt` (shorthand for "weight"), which allows us to rank one column by the values of another, like here where we return for each country the summation of their values in the `Quantity` column and not just how many rows they have.
+
+```{r}
+df %>%
+  count(Country, wt = Quantity)
+```
+
+Internally it modifies the `summarise()` call from `n()` to `sum(wt)`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(Total_Quantity = sum(Quantity))
+```
+
+So, instead of counting each row as 1, it counts each row by the values of the column used in `wt`.
+
+Using columns with values that can't be summed results with an error.
+
+```{r, error = TRUE}
+df %>%
+  count(Country, wt = Description)
+```
+
+If our data has already been aggregated, 
+
+```{r}
+df %>%
+  count(Country, `Customer ID`)
+```
+
+`wt` can be employed to retrieve the original number of rows pertaining to a group.
+
+```{r}
+df %>%
+  count(Country, `Customer ID`) %>%
+  count(Country, wt = n)
+```
+
+`wt` also offers the possibility of being used with a function.
+
+```{r}
+df %>%
+  count(Country, wt = range(Quantity))
+```
+
+That example translates to this,
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(n = sum(range(Quantity)))
+```
+
+where it's easier to understand that, for every value of the `Country` column, we sum the two values returned by `range(Quantity)`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  reframe(n = range(Quantity))
+```
+
+We can also use functions that only return one value per group,
+
+```{r}
+df %>%
+  count(Country, wt = n_distinct(Invoice))
+```
+
+but in this case the summation is inconsequential as there is only one addend
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(n = sum(n_distinct(Invoice)))
+df %>%
+  group_by(Country) %>%
+  summarise(n = n_distinct(Invoice))
+```
+
+and it is mainly just a way to use another function beside `n()` in the, wrapped, `summarise()` call of `count()`.
+
+Using a function that doesn't output a number clearly throws an error.
+
+```{r, error = TRUE}
+df %>%
+  count(Country, wt = stringr:::str_replace(`Customer ID`, "2", "3"))
+```
+
+`wt` can be used with more than one column as well.
+
+```{r}
+df %>%
+  count(Country, wt = c(Quantity, Price))
+```
+
+And it would be like summing together, for every value of the grouping column, every value of the columns specified.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(n = sum(Quantity, Price))
+```
+
+Another example, here we return 1 (TRUE) for the countries that have more than 15 rows and 0 (FALSE) for the ones that don't (only Lebanon here).
+
+```{r}
+df %>%
+  count(Country, wt = n() > 15)
+```
+
+As in one of the previous examples, the summation is inconsequential, apart from transforming logical values into integers.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(n = sum(n() > 15))
+df %>%
+  group_by(Country) %>%
+  summarise(n = n() > 15)
+```
+
+# - *name*
+
+The `name` argument, which modifies the name of the `count()` output column from the default `n`,
+
+```{r}
+df %>%
+  count(Country, name = "N_Rows")
+```
+
+comes in handy with `wt` to have more apt denominations, like we can do with `summarise()`.
+
+```{r}
+df %>%
+  count(Country, wt = Quantity, name = "Total_Quantity")
+df %>%
+  group_by(Country) %>%
+  summarize(Total_Quantity = sum(Quantity))
+```
+
+Using more than one column is not a problem.
+
+```{r}
+df %>%
+  count(Country, `Customer ID`, wt = n_distinct(Invoice), name = "N_Invoices")
+```
+
+# - *.drop*
+
+The last argument is `.drop`, which, when we set to FALSE (default is TRUE), has the same utility as in `group_by()`, alas it doesn't drop the levels of a factor when their count is equal to 0 (the Unspecified country in this example, that has 0 rows after we modify its name to NA if at the same time we retain it as a level).
+
+```{r}
+df %>%
+  mutate(Country = na_if(Country, "Unspecified"),
+         Country = factor(Country, levels = unique(df$Country))) %>%
+  count(Country, .drop = FALSE)
+df %>%
+  mutate(Country = na_if(Country, "Unspecified"),
+         Country = factor(Country, levels = unique(df$Country))) %>%
+  count(Country)
+```
+
+`.drop = FALSE` will keep the empty levels also when they have already been removed by a previous manipulation (`filter(n() > 15)` here, which removes the Lebanon group).
+
+```{r}
+df %>%
+  group_by(Country = factor(Country)) %>%
+  filter(n() > 15) %>%
+  count(Country, .drop = FALSE)
+df %>%
+  group_by(Country = factor(Country)) %>%
+  filter(n() > 15) %>%
+  count(Country)
+```
+
+As with `group_by()`, we must be careful when using several factor columns as it returns combinations not present in the data frame, like every customer located in every country.
+
+```{r}
+df %>%
+  count(factor(Country), factor(`Customer ID`), .drop = FALSE)
+df %>%
+  count(factor(Country), factor(`Customer ID`))
+```
+
+# - *repetitions spotter*
+
+As already seen, with more than one column `count()` returns all the unique existing combinations between their values, counting with `n` the number of rows pertaining to each group.
+
+```{r}
+df %>%
+  count(Invoice, StockCode)
+```
+
+If `n` is higher than 1, like for invoice 489488 with stock code 22125,
+
+```{r}
+df %>%
+  count(Invoice, StockCode) %>%
+  filter(Invoice == "489488")
+```
+
+it means that there are several rows with the same values in, at least, those two columns.
+
+```{r}
+df %>%
+  filter(Invoice == "489488" &
+           StockCode == "22125")
+```
+
+Filtering for `n > 1` can then be used as a way to spot repetitions in the columns specified in `count()`, which can be errors if those two columns should have had a single unique combination.
+
+```{r}
+df %>%
+  count(Invoice, StockCode) %>%
+  filter(n > 1)
+```
+
+If desired, we can extend this procedure to all the columns to spot duplicated rows.
+
+```{r}
+df %>%
+  count(pick(everything()), name = "# of repetitions") %>%
+  filter(`# of repetitions` > 1)
+```
+
+If instead we are interested in spotting the non duplicated rows, we can just use `distinct()`.
+
+```{r}
+df %>%
+  distinct()
+```
+
+# - *number of unique combinations*
+
+The procedure can be extended if we want to know how many unique existing combinations of two columns there are for each value of one of them.
+In the following example the one column is `Invoice` and we are looking for the unique existing combinations with `StockCode` for every value of it.
+
+```{r}
+df %>%
+  count(Invoice, StockCode) %>%
+  count(Invoice)
+```
+
+So for instance for invoice 489488 (the invoice from a previous example) there are 29 unique combinations with the `StockCode` column.
+
+```{r}
+df %>%
+  count(Invoice, StockCode) %>%
+  count(Invoice) %>%
+  filter(Invoice == "489488")
+```
+
+That obviously amounts to the number of rows from the first `count()` call.
+
+```{r}
+df %>%
+  count(Invoice, StockCode) %>%
+  filter(Invoice == "489488")
+```
+
+If we add a third column as well (to look for the unique existing combinations of three columns for every value of one of them), `Price` for example, `n` stays the same,
+
+```{r}
+df %>%
+  count(Invoice, StockCode, Price) %>%
+  count(Invoice) %>%
+  filter(Invoice == "489488")
+```
+
+as `Price` doesn't vary for any stock code, so the number of combinations is constant.
+
+```{r}
+df %>%
+  count(Invoice, StockCode, Price) %>%
+  filter(Invoice == "489488") %>%
+  arrange(StockCode)
+```
+
+This can more easily checked with a grouped `filter()` on the number of rows per stock code: if no stock code has more than one row per invoice, it means that only one value of `Price` is assigned to it.
+
+```{r}
+df %>%
+  count(Invoice, StockCode, Price) %>%
+  filter(Invoice == "489488") %>%
+  group_by(StockCode) %>%
+  filter(n() > 1)
+```
+
+If we use `Quantity`instead of `Price` though, `n` increases of one unit,
+
+```{r}
+df %>%
+  count(Invoice, StockCode, Quantity) %>%
+  count(Invoice) %>%
+  filter(Invoice == "489488")
+```
+
+because that column changes values between two rows for stock code 22125, as we've seen in a previous example, resulting therefore in an additional combination,
+
+```{r}
+df %>%
+  count(Invoice, StockCode, Quantity) %>%
+  filter(Invoice == "489488") %>%
+  arrange(StockCode)
+```
+
+that, as before, can be more easily spotted when we group filter for `n()` > 1 on stock codes.
+
+```{r}
+df %>%
+  count(Invoice, StockCode, Quantity) %>%
+  filter(Invoice == "489488") %>%
+  group_by(StockCode) %>%
+  filter(n() > 1)
+```
+
+If we wish to generalize the grouped `filter()` call, we need to add the `Invoice` column as a grouping one,
+
+```{r}
+df %>%
+  count(Invoice, StockCode, Quantity) %>%
+  group_by(Invoice, StockCode) %>%
+  filter(n() > 1)
+```
+
+otherwise we would just filter on stock codes regardless of the invoice they pertain to.
+
+```{r}
+df %>%
+  count(Invoice, StockCode, Quantity) %>%
+  group_by(StockCode) %>%
+  filter(n() > 1) %>%
+  arrange(StockCode)
+```
+
+Instead of piping two `count()`s in succession we can also use the `wt` argument with `n_distinct()` to attain the same results.
+
+```{r}
+df %>%
+  count(Invoice, StockCode) %>%
+  count(Invoice)
+df %>%
+  count(Invoice, wt = n_distinct(StockCode))
+```
+
+That translates to
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(n = n_distinct(StockCode))
+```
+
+We can as well use more than one columns with `n_distinct()`, always to return the number of all the unique existing combinations of three columns for every value of one of them.
+
+```{r}
+df %>%
+  count(Invoice, StockCode, Quantity) %>%
+  count(Invoice) %>%
+  filter(Invoice == "489488")
+df %>%
+  count(Invoice, wt = n_distinct(StockCode, Quantity)) %>%
+  filter(Invoice == "489488")
+```
+
+So we need to use the one column in `count()` and the other two in `n_distinct()`.
+
+Without `count()` we would otherwise write like this.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(n = n_distinct(StockCode, Quantity)) %>%
+  filter(Invoice == "489488")
+```
+
+But if we instead write like this, with only one column in `n_distinct()`,
+
+```{r}
+df %>%
+  count(Invoice, StockCode, wt = n_distinct(Quantity)) %>% 
+  filter(Invoice == "489488")
+```
+
+that translates to this,
+
+```{r}
+df %>%
+  group_by(Invoice, StockCode) %>%
+  summarise(n = n_distinct(Quantity)) %>%
+  filter(Invoice == "489488")
+```
+
+we would obtain the number of unique values of the `Quantity` column for every unique existing combination of `Invoice` and `StockCode` (something very different from before then, as shown by the output).
+
+As before, a subsequent grouped filter on `n` can be useful to more easily pinpoint the stock codes with different quantities in the same invoice.
+
+```{r}
+df %>%
+  count(Invoice, StockCode, wt = n_distinct(Quantity)) %>% 
+  group_by(Invoice, StockCode) %>%
+  filter(n > 1)
+```
+
+# - *with group_by()*
+
+When used on a grouped data frame, `count()` appends the groups created by its argument, performs the count and then ungroups while retaining the original grouping.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  count(StockCode, Quantity)
+```
+
+It is equivalent to
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  group_by(StockCode, Quantity, .add = TRUE) %>%
+  summarise(n = n()) %>%
+  ungroup(StockCode, Quantity)
+```
+
+If we add the column from `group_by()` to `count()`, as a way to modify the columns' order of the output, it is important to notice that `count()` doesn't overwrite it, as the column from `group_by()` has the precedence, being the group key of the output.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  count(StockCode, Invoice, Quantity)
+```
+
+So we have to resort to pipe an additional `select()` call.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  count(StockCode, Quantity) %>%
+  select(StockCode, Invoice, Quantity, n)
+```
+
+With `sort` we can rearrange the rows though, as it overrides the group keys from `group_by()`.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  count(StockCode, Quantity, sort = TRUE)
+```
+
+# - *add_count()*
+
+data-masking
+
+In case we don't want to summarize our data frame, we can use `add_count()` which is equivalent to `group_by() %>% mutate(n = n()`).
+
+```{r}
+df %>%
+  add_count(Country)
+df %>%
+  group_by(Country) %>% 
+  mutate(n = n())
+```
+
+Like `count()`, it ungroups the output also with several columns,
+
+```{r}
+df %>%
+  add_count(Country,`Customer ID`)
+```
+
+while `mutate()` keeps the grouping as is.
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`) %>% 
+  mutate(n = n())
+```
+
+`add_count()` can be used with expressions
+
+```{r}
+df %>%
+  add_count(CustomerID = `Customer ID`)
+df %>%
+  add_count(Price_Rank = dense_rank(Price))
+```
+
+and is consistent with the optional arguments of `count()`,
+
+```{r}
+df %>%
+  add_count(Country, wt = Quantity, name = "Total_Quantity", sort = TRUE)
+```
+
+except for `.drop`, deprecated, as it can't modify the output.
+
+```{r}
+df %>%
+  mutate(Country = na_if(Country, "Unspecified"),
+         Country = factor(Country, levels = unique(df$Country))) %>%
+  add_count(Country, .drop = FALSE)
+df %>%
+  mutate(Country = na_if(Country, "Unspecified"),
+         Country = factor(Country, levels = unique(df$Country))) %>%
+  add_count(Country)
+```
+
+For instance in the following example it can't reconstruct previously filtered rows.
+
+```{r}
+df %>%
+  group_by(Country = factor(Country)) %>%
+  filter(n() > 15) %>%
+  add_count(Country, .drop = FALSE)
+```
+
+## - *with group_by()*
+
+`add_count()` on a grouped data frame has the same behavior as `count()` (appending the groups created by its argument, performing the count and then ungrouping while keeping the original grouping).
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  add_count(StockCode, Quantity)
+```
+
+Similarly as before, it is equivalent to this.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  group_by(StockCode, Quantity, .add = TRUE) %>%
+  mutate(n = n()) %>%
+  ungroup(StockCode, Quantity)
+```
+
+Likewise it can't modify the columns' order of the output,
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  add_count(StockCode, Invoice, Quantity)
+```
+
+but `sort` can modify the rows' order.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  add_count(StockCode, Quantity, sort = TRUE)
+```

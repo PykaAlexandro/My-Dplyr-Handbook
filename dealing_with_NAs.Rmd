@@ -1,0 +1,335 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+# - *introduction*
+
+Missing values in a data frame are coded as NA (not available) and are elements that can prove themselves troublesome, especially as, when involved, they can alter the results of calculations.
+
+```{r, df_print = "paged"}
+(x <- c(1, 2, 3))
+mean(x)
+sum(x)
+(xNA <- c(x, NA))
+mean(xNA)
+sum(xNA)
+```
+
+`mean()` and `sum()` have an `na.rm` argument that helps deal with them
+
+```{r, df_print = "paged"}
+mean(xNA, na.rm = TRUE)
+sum(xNA, na.rm = TRUE)
+```
+
+but other functions might not, so it is important to know how to detect and remove or substitute them, hence why I decided to collect and organize in this page procedures possibly already presented in other ones.
+
+# - *column-wise detection*
+
+At first it is useful to know their location, marking with TRUE the columns where they are present and with FALSE otherwise.
+
+```{r}
+df %>%
+  summarise(across(everything(), ~ any(is.na(.x))))
+```
+
+Additionally, we may want to know how many of them are there per column,
+
+```{r}
+df %>%
+  summarise(across(everything(), ~ sum(is.na(.x))))
+```
+
+and as a percentage over the number of rows.
+
+```{r}
+df %>%
+  summarise(across(everything(), ~ formattable::percent(mean(is.na(.x)))))
+```
+
+We can combine those two information in just one output.
+
+```{r}
+df %>%
+  summarise(across(everything(), ~ sum(is.na(.x)))) %>%
+  tidyr::pivot_longer(everything(), names_to = "Column", values_to = "#_of_NAs") %>%
+  bind_cols(df %>%
+              summarise(across(everything(), ~ formattable::percent(mean(is.na(.x))))) %>%
+              tidyr::pivot_longer(everything(), names_to = "Column", values_to = "%_of_NAs") %>%
+              select(2))
+```
+
+# - *row-wise detection*
+
+Knowing about their presence and number for each row can also be useful.
+
+```{r}
+df %>%
+  mutate(row_with_NAs = as.logical(rowSums(is.na(df))), .before = 1)
+df %>%
+  mutate(`#_NAs` = rowSums(is.na(df)), .before = 1)
+```
+
+# - *group-wise detection*
+
+For a grouped data frame we can show, for every column and for groups with NAs, both their total number
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(across(everything(), ~ sum(is.na(.x)))) %>%
+  filter(rowSums(across(Invoice:`Customer ID`)) != 0)
+```
+
+and the percentage over the total number of rows for each group.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(across(everything(), ~ formattable::percent(mean(is.na(.x))))) %>%
+  filter(rowSums(across(Invoice:`Customer ID`)) != 0)
+```
+
+We can also concentrate on only one column,
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(NAs_in_Customer_ID = any(is.na(`Customer ID`)))
+df %>%
+  group_by(Country) %>%
+  summarise(`#_of_NAs_in_Customer_ID` = sum(is.na(`Customer ID`)))
+```
+
+merging the two information into one table, only for groups with NAs.
+
+```{r}
+df %>%
+  count(`NAs_in_Customer_ID` = is.na(`Customer ID`), Country, name = "#_of_rows") %>%
+  arrange(Country) %>%
+  group_by(Country) %>%
+  filter(n() > 1)
+```
+
+# - *column-wise removal*
+
+If we wish to remove the columns with NAs we can select the ones where all their values are not NAs,
+
+```{r}
+df %>%
+  select(where(~ all(!is.na(.x))))
+```
+
+or deselect the ones where any of their values are NAs; these two commands are equivalent.
+
+```{r}
+df %>%
+  select(where(~ !any(is.na(.x))))
+```
+
+Of course we can also decide to select the columns with NAs, with either one of the following lines of code.
+
+```{r}
+df %>%
+  select(where(~ any(is.na(.x))))
+df %>%
+  select(where(~ !all(!is.na(.x))))
+```
+
+A similar call can be useful to investigate if there are columns with only NAs.
+
+```{r}
+df %>%
+  select(where(~ all(is.na(.x))))
+```
+
+# - *row-wise removal*
+
+If we wish to preserve the rows without NAs in a particular column we can write
+
+```{r}
+df %>%
+  filter(!is.na(Description))
+```
+
+Using the correct Boolean operator, we can also decide to preserve the rows without NAs in either one of the specified columns,
+
+```{r}
+df %>%
+  filter(!is.na(Description) |
+           !is.na(`Customer ID`))
+```
+
+or in all of them. 
+
+```{r}
+df %>%
+  filter(!is.na(Description) &
+           !is.na(`Customer ID`))
+```
+
+If we yet don't know which columns have NAs, we can preserve the rows without them like this:
+
+```{r}
+df %>%
+  filter(if_all(everything(), ~ !is.na(.x)))
+```
+
+Using `if_any()` will instead be equivalent to preserving the rows without NAs in any given column, so only rows with all NAs will be removed in this case.
+
+```{r}
+df %>%
+  filter(if_any(everything(), ~ !is.na(.x)))
+```
+
+Of course we can also decide to preserve rows with NAs; we can do so by removing the negations from the previous five examples. With the first one we will only preserve the rows with NAs in the `Description` column. 
+
+```{r}
+df %>%
+  filter(is.na(Description))
+```
+
+With the second one we will preserve rows with NAs in either one of the columns specified,
+
+```{r}
+df %>%
+  filter(is.na(Description) |
+           is.na(`Customer ID`))
+```
+
+which is here equivalent to the last one without negations, as all the rows with NAs in `Description` have NAs in `Customer ID`.
+
+```{r}
+df %>%
+  filter(if_any(everything(), ~ is.na(.x)))
+```
+
+With the third one the rows with NAs in all of the columns specified, again equivalent to a previous call given the NAs distribution of this data frame.
+
+```{r}
+df %>%
+  filter(is.na(Description) &
+           is.na(`Customer ID`))
+```
+
+And with the fourth example the rows that only have NAs (so none with this data frame).
+
+```{r}
+df %>%
+  filter(if_all(everything(), ~ is.na(.x)))
+```
+
+# - *substitution*
+
+Another approach is to substitute NAs with another value; the following will work as long as the columns that contain them are of the same type of the value we want to input.
+
+```{r}
+df %>%
+  mutate(across(where(~ any(is.na(.x)) & is.character(.x)), ~ coalesce(.x, "missing")))
+df %>%
+  mutate(across(where(~ any(is.na(.x)) & is.numeric(.x)), ~ coalesce(.x, 000000)))
+```
+
+The previous two calls can be combined into a single one.
+
+```{r}
+df %>%
+  mutate(across(where(~ any(is.na(.x)) & is.character(.x)), ~ coalesce(.x, "missing")),
+         across(where(~ any(is.na(.x)) & is.numeric(.x)), ~ coalesce(.x, 000000)))
+```
+
+If instead we want to recode a specific value to NA, we can proceed like this.
+
+```{r}
+df %>%
+  mutate(across(where(is.character), ~ na_if(., "Unspecified")),
+         across(where(is.numeric), ~ na_if(., 12)))
+```
+
+# - *other values besides NA*
+
+NA is a special coded value, useful to identify missing values in data frames, but we can apply the previous procedures also to a value of choice, like for example "CHRISTMAS".
+
+```{r}
+df %>%
+  summarise(across(everything(), ~ any(stringr::str_detect(.x, "CHRISTMAS"), na.rm = TRUE)))
+df %>%
+  summarise(across(everything(), ~ sum(stringr::str_detect(.x, "CHRISTMAS"), na.rm = TRUE)))
+df %>%
+  summarise(across(everything(), ~ formattable::percent(mean(stringr::str_detect(.x, "CHRISTMAS"), na.rm = TRUE))))
+```
+
+We had to use a function from the `stringr` package to act on behalf of `is.na()`, and also to add `na.rm = TRUE` to not have NAs unfavourably modify the output (for `any()`/`all()` the reasons are explained [here](https://pykaalexandro.github.io/My-Dplyr-Handbook/any_all_variants.html#-_interactions_between_NAs__TRUE_or_FALSE) in the any(), all() & their variants page, but briefly `any(FALSE, NA)` returns `NA`).
+
+```{r}
+df %>%
+  summarise(across(everything(), ~ any(stringr::str_detect(.x, "CHRISTMAS"))))
+```
+
+To substitute, we can use `str_replace_all()`, always from the `stringr` package.
+
+```{r}
+df %>%
+  mutate(across(where(is.character), ~ stringr::str_replace_all(.x, "CHRISTMAS", "EASTER")))
+```

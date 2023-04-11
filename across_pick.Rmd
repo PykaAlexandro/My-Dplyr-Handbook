@@ -1,0 +1,685 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+tidy-select
+
+# - *fundamentals*
+
+When we apply the same function to different columns,
+
+```{r}
+df %>%
+  summarise(Avg_Quantity = mean(Quantity),
+            Avg_Price = mean(Price))
+```
+
+we can use `across()` to produce more concise and less prone to typos code.
+
+```{r}
+df %>% 
+  summarise(across(c(Quantity, Price), mean))
+```
+
+In its first argument we specify the columns we want to apply the function to, using the same syntax as `select()`.
+
+```{r, warning = FALSE}
+df %>% 
+  summarise(across(c(Quantity, Price), mean))
+df %>% 
+  summarise(across(c(4, 6), mean))
+df %>% 
+  summarise(across(Quantity:Price, mean))
+df %>% 
+  summarise(across(where(is.numeric), mean))
+df %>%
+  summarise(across(c(where(is.numeric), -`Customer ID`), mean))
+df %>%
+  summarise(across(starts_with(c("Q", "P")), mean))
+df %>%
+  summarise(across(everything(), mean))
+```
+
+And in the second the function we want to apply, that can be written in other ways as well,
+
+```{r}
+df %>%
+  summarise(across(where(is.numeric), ~ mean(.x)))
+df %>%
+  summarise(across(where(is.numeric), function(x) mean(x)))
+```
+
+which is useful in case the function has optional arguments we want to employ.
+
+```{r}
+df %>%
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+df %>%
+  summarise(across(where(is.numeric), function(x) mean(x, na.rm = TRUE)))
+```
+
+`across()` can be used several times in the same call.
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  summarise(across(where(is.numeric), mean),
+            across(where(is.character), n_distinct),
+            n = n())
+```
+
+# - *.names*
+
+With the `.names` argument we can change the output names from the default `{.col}` (which is the name of the input columns).
+
+```{r}
+df %>%
+  summarise(across(c(Quantity, Price), mean))
+df %>%
+  summarise(across(c(Quantity, Price), mean, .names = "Avg_{.col}"))
+```
+
+It uses the `glue` library syntax and it allows for important modifications.
+
+```{r}
+df %>%
+  summarise(across(c(Quantity, Price), mean, .names = "avg_{stringr::str_to_lower(.col)}"))
+```
+
+If we are using `mutate()` though we need to be careful as the lack of the `.names` argument overwrites the original columns.
+
+```{r}
+df %>%
+  mutate(across(c(Quantity, Price), mean), .keep = "used")
+df %>%
+  mutate(across(c(Quantity, Price), mean, .names = "Avg_{.col}"), .keep = "used")
+```
+
+`across()` creates tibbles, so using it in the following way will add a column with a tibble for every row.
+
+```{r}
+df %>%
+  mutate(Total_Expense = across(c(where(is.numeric), -`Customer ID`), mean), .keep = "used")
+```
+
+The results inside every tibble are the same.
+
+```{r}
+df %>%
+  mutate(Total_Expense = across(c(where(is.numeric), -`Customer ID`), mean), .keep = "used") %>%
+  select(Total_Expense) %>%
+  slice(1:2) %>%
+  tidyr::unnest(cols = c(Total_Expense))
+```
+
+To not get confused by all the parenthesis, we stress the fact that `across()` is the sole argument of the `summarise()`/`mutate()`/etc. call.
+
+```{r}
+df %>%
+  summarise(
+    across(c(Quantity, Price), ~ mean(.x, na.rm = TRUE), .names = "avg_{stringr::str_to_lower(.col)}")
+    )
+```
+
+# - *multiple functions in an external list*
+
+Instead of just one function, we can use several if we put them in a list.
+
+```{r, df_print = "paged"}
+(avg_std <- list(avg = ~ mean(.x),
+                 st_dev = ~ sd(.x)))
+```
+```{r}
+df %>%
+  summarise(across(c(Quantity, Price), avg_std))
+```
+
+Take notice of the names of the output columns that stem from the default `.names = {col}_{fn}` for when we use a list of functions.
+As before, that can be modified with a `glue` syntax and the appropriate strings manipulation functions.
+
+```{r}
+df %>%
+  summarise(across(c(Quantity, Price), avg_std, .names = "{col}.{stringr::str_to_title(fn)}"))
+df %>%
+  summarise(across(c(Quantity, Price), avg_std, .names = "{stringr::str_to_title(fn)}.{col}"))
+```
+
+In case we want to have akin columns close to each other, we have to split the code in two (or piping another `select()`/`relocate()` call).
+
+```{r}
+df %>%
+  summarise(across(c(Quantity, Price), ~ mean(.x), .names = "Avg.{col}"),
+            across(c(Quantity, Price), ~ sd(.x), .names = "St_dev.{col}"))
+```
+
+When the list is not named,
+
+```{r, df_print = "paged"}
+(avg_std_2 <- list(~ mean(.x),
+                   ~ sd(.x)))
+```
+
+the default is to differentiate the columns by numbering them.
+
+```{r}
+df %>%
+  summarise(across(c(Quantity, Price), avg_std_2))
+```
+
+Using a list of functions with `mutate()` adds new columns at the end of the data frame. 
+
+```{r}
+df %>%
+  mutate(across(c(Quantity, Price), avg_std))
+df %>%
+  mutate(across(c(Quantity, Price), avg_std_2))
+```
+
+When we use a function that returns more than one output it's better to use `reframe()` instead of `summarise()`.
+
+```{r}
+df %>%
+  reframe(across(c(Quantity, Price), range))
+```
+
+And when it is used together with single output functions the result of the latter will be replicated.
+
+```{r, df_print = "paged"}
+(range_iqr <- list(range = ~ range(.x),
+                   iqr = ~ IQR(.x)))
+```
+```{r}
+df %>%
+  reframe(across(c(Quantity, Price), range_iqr))
+```
+
+# - *possible selection issues*
+
+`across()` can also evaluates columns just created if they answer to the selection statement, like the following numeric `n`, giving undesired results, like its standard deviation (which is a single number, hence the NA) instead of the number of rows of the data frame.
+
+```{r}
+df %>%
+  summarise(n = n(), 
+            across(c(where(is.numeric), -`Customer ID`), sd))
+```
+
+There are several solutions to that:  
+we can move `n` after the `across()` call, in this way it will not be evaluated by it
+
+```{r}
+df %>%
+  summarise(across(c(where(is.numeric), -`Customer ID`), sd), 
+            n = n())
+```
+
+we can explicitly exclude `n` from the selection if we care about the order of the output
+
+```{r}
+df %>%
+  summarise(n = n(), 
+            across(c(where(is.numeric), -c(`Customer ID`, n)), sd))
+```
+
+or we can wrap everything in a data frame where `n` is independent from the columns returned by `across()`.
+
+```{r}
+df %>% 
+  summarise(tibble(n = n(), 
+                   across(c(where(is.numeric), -`Customer ID`), sd)))
+```
+
+# - *cur_column()*
+
+`cur_column()` is an `across()` specific function that returns the column that is currently being evaluated.
+
+```{r}
+df %>% 
+  mutate(across(c(Quantity, Price), ~ paste(cur_column(), .x)), .keep = "used")
+```
+
+That line of code is equivalent to this one, where we can see that it returns the name of the column, not the values.
+
+```{r}
+df %>%
+  mutate(Quantity = paste("Quantity", Quantity),
+         Price = paste("Price", Price), .keep = "used")
+```
+
+We can taking advantage of `cur_column()` if for example we want to multiply several numeric columns for a different number each.
+
+To do so we have to beforehand define a named list with the numbers we want to multiply every column with,
+
+```{r, df_print = "paged"}
+(mult_list <- list(Quantity = 2,
+                   Price = 10))
+```
+
+and then in the function argument of `across()` we can access that specific number by subsetting the list with `cur_column()`.
+
+```{r}
+df %>% 
+  mutate(across(c(Quantity, Price), ~ .x * mult_list[[cur_column()]], .names = "Mult_{.col}"), .keep = "used")
+```
+
+We can also use it to dynamically change the arguments of the function.
+
+```{r, df_print = "paged"}
+(n_digital <- list(Quantity = 2,
+                   Price = 1))
+```
+```{r}
+df %>% 
+  mutate(across(c(Quantity, Price), ~ round(.x, n_digital[[cur_column()]]), .names = "Rounded_{.col}"), .keep = "used")
+```
+
+If the columns selected are many we can access them more concisely using the selection helper `all_of()`.
+
+```{r}
+df %>%
+  mutate(across(all_of(names(mult_list)), ~ .x * mult_list[[cur_column()]], .names = "Mult_{.col}"), .keep = "used")
+df %>%
+  mutate(across(all_of(names(n_digital)), ~ round(.x, n_digital[[cur_column()]]), .names = "Rounded_{.col}"), .keep = "used")
+```
+
+# - *.unpack*
+
+In case the function returns data frames,
+
+```{r}
+df %>%
+  mutate(across(c(Quantity, Price), ~ tibble(Min = min(.x), Max = max(.x)), .names = "MinMax_{.col}"), .keep = "used")
+```
+
+we can use `.unpack = TRUE` to expand them.
+
+```{r}
+df %>%
+  mutate(across(c(Quantity, Price), ~ tibble(Min = min(.x), Max = max(.x)), .unpack = TRUE), .keep = "used")
+```
+
+And, as with `.names`, we can modify the output from the default `{outer}_{inner}`, where the former refer to the names of `df` and the latter to the names of the data frames created by the function.
+
+```{r}
+df %>%
+  mutate(across(c(Quantity, Price), ~ tibble(Min = min(.x), Max = max(.x)), .unpack = "{inner}_{outer}"), .keep = "used")
+```
+
+# - *not applicable verbs*
+
+`across()` doesn't work with other columns manipulation verbs that use the same tidy-select syntax, like `select()`, `rename()` and `relocate()`.
+
+```{r, error = TRUE}
+df %>%
+  select(across(c(Quantity, Price)))
+```
+
+Instead of `rename()` we can use `rename_with()` in case we want to change the names of columns.
+Notice how the two arguments (the selection of columns and the function to be applied to them) are in a different order compared to `across()`.
+
+```{r}
+df %>%
+  rename_with(stringr::str_to_lower, c(Quantity, Price))
+```
+
+# - *other applicable verbs*
+
+`across()` works though with other rows manipulation verbs that uses the `mutate()` data-masking syntax.
+Except for `slice()`, as that verb doesn't have a selection of several columns between its arguments.
+
+## - *arrange()*
+
+With `arrange()` it can speed up typing if we are using columns with similarities to take advantage of.
+
+```{r}
+df %>%
+  arrange(across(starts_with("I"), desc))
+df %>%
+  arrange(desc(Invoice), desc(InvoiceDate))
+```
+
+We have no way of individually control the order of the columns though.
+
+```{r}
+df %>%
+  arrange(desc(Invoice), InvoiceDate)
+```
+
+## - *filter() (with if_all()/if_any())*
+
+With `filter()` we can use `across()` to facilitate the following code, where we preserve the rows that have a value greater than 5 in all the columns specified.
+
+```{r}
+df %>%
+  filter(Quantity > 5 &
+           Price > 5)
+df %>%
+  filter(across(c(Quantity, Price), ~ .x > 5))
+```
+
+But, as the warning suggests, it is better to use `if_all()` as `across()` for `filter()` is deprecated.
+
+```{r}
+df %>%
+  filter(if_all(c(Quantity, Price), ~ .x > 5))
+```
+
+In case we want to preserve rows that have a value greater than 5 in any of the columns selected,
+
+```{r}
+df %>%
+  filter(Quantity > 5 |
+           Price > 5)
+```
+
+we are obliged to use `if_any()`, as `across()` is not able to do that.
+
+```{r}
+df %>%
+  filter(if_any(c(Quantity, Price), ~ .x > 5))
+```
+
+We can also use them to filter for the same interval on several columns, either on all of them at the same time,
+
+```{r}
+df %>%
+  filter(between(Quantity, 10, 20) &
+           between(Price, 10, 20))
+df %>%
+  filter(if_all(c(Quantity, Price), ~ between(.x, 10, 20)))
+df %>%
+  filter(if_all(c(Quantity, Price), ~ .x >= 10 & .x <= 20))
+```
+
+or just on any of them.
+
+```{r}
+df %>%
+  filter(between(Quantity, 10, 20) |
+           between(Price, 10, 20))
+df %>%
+  filter(if_any(c(Quantity, Price), ~ between(.x, 10, 20)))
+df %>%
+  filter(if_any(c(Quantity, Price), ~ .x >= 10 & .x <= 20))
+```
+
+By design though they don't understand `cur_column()` so if we want to filter each column for a different value 
+
+```{r}
+df %>%
+  filter(Quantity > 2 &
+           Price > 10)
+```
+
+we need to use `across()` (thus an `&` statement), therefore we can only preserve the rows where both conditions are TRUE at the same time.
+
+```{r, df_print = "paged"}
+(fltr <- list(Quantity = 2,
+              Price = 10))
+```
+```{r}
+df %>%
+  filter(across(c(Quantity, Price), ~ .x > fltr[[cur_column()]]))
+```
+
+Another example with `between()`, where we filter on two different ranges.
+
+```{r}
+df %>%
+  filter(between(Quantity, 10, 20) &
+           between(Price, 20, 30))
+```
+```{r, df_print = "paged"}
+(fltr2 <- list(Quantity = c(10, 20),
+               Price = c(20, 30)))
+```
+```{r}
+df %>%
+  filter(across(c(Quantity, Price), ~ between(.x, fltr2[[cur_column()]][1], fltr2[[cur_column()]][2])))
+```
+
+`if_all()` and `if_any()` can also be used in `mutate()` or `summarise()` calls, as long as we exploit their property of returning logical vectors.
+
+```{r}
+df %>%
+  mutate(High = case_when(Quantity > 50 & Price > 50  ~ "volume_and_price",
+                          Quantity > 50 | Price > 50  ~ "volume_or_price",
+                          Quantity < 50 & Price < 50  ~ "neither"), .keep = "used")
+df %>%
+  mutate(High = case_when(if_all(c(Quantity, Price), ~ .x > 50) ~ "volume_and_price",
+                          if_any(c(Quantity, Price), ~ .x > 50) ~ "volume_or_price",
+                          if_all(c(Quantity, Price), ~ .x <= 50) ~ "neither"), .keep = "used")
+```
+
+## - *group_by()*
+
+`across()` can be used with `group_by()` as well, with just the first argument.
+
+```{r}
+df %>%
+  group_by(across(c(Quantity, Price)))
+df %>%
+  group_by(across(everything())) %>%
+  filter(n() > 1)
+```
+
+## - *count(), distinct() & other verbs*
+
+That worked because `across()` returns a data frame, so we can utilize `across()` with every function that takes one, like `count()`,
+
+```{r}
+df %>%
+  count(across(c(Country, `Customer ID`)))
+```
+
+or `distinct()`.
+
+```{r}
+df %>%
+  distinct(across(c(Country, `Customer ID`)))
+```
+
+But that doesn't mean that we can't apply a function as well when it is appropriate.
+
+```{r}
+df %>%
+  distinct(across(c(Country, `Customer ID`),  ~ stringr::str_to_lower(.x)))
+```
+
+If the data frame already has logical columns,
+
+```{r}
+df %>%
+  mutate(Boolean_TFT = rep(c(TRUE, FALSE, TRUE), length.out = nrow(df)),
+         Boolean_TF = rep(c(TRUE, FALSE), length.out = nrow(df)), .before = "Invoice")
+```
+
+`if_all()` and `if_any()` too can be used without a function.
+
+```{r}
+df %>%
+  mutate(Boolean_TFT = rep(c(TRUE, FALSE, TRUE), length.out = nrow(df)),
+         Boolean_TF = rep(c(TRUE, FALSE), length.out = nrow(df)), .before = "Invoice") %>%
+  filter(if_all(where(is.logical)))
+df %>%
+  mutate(Boolean_TFT = rep(c(TRUE, FALSE, TRUE), length.out = nrow(df)),
+         Boolean_TF = rep(c(TRUE, FALSE), length.out = nrow(df)), .before = "Invoice") %>%
+  filter(if_any(where(is.logical)))
+```
+
+# - *with group_by()*
+
+With grouped data frames the grouping columns are never included in the selection, even if they satisfy the selecting condition.
+
+```{r}
+df %>%
+  group_by(`Customer ID`) %>%
+  summarise(across(where(is.numeric), mean))
+```
+
+## - *cur_group()*
+
+We've seen previously that `cur_column()` accesses the currently selected column.   
+`cur_group()` lets us access the current group, so it can be used if we want to modify each row for a value specific to the group it pertains.
+
+```{r, df_print = "paged"}
+(mod_tbl <- tibble("France" = 2,
+                   "Italy" = 10,
+                   "Germany" = 5))
+```
+```{r}
+df %>%
+  filter(Country %in% c("France", "Italy", "Germany")) %>%
+  select(Country, Quantity, Price)
+df %>%
+  filter(Country %in% c("France", "Italy", "Germany")) %>%
+  select(Country, Quantity, Price) %>%
+  group_by(Country) %>%
+  mutate(across(c(Quantity, Price), ~ .x * mod_tbl[[cur_group()$Country]], .names = "Mod_{.col}"))
+```
+
+Compared to before, notice how we needed to define a tibble, and not a list, for the `Country` specific values and also to subset `cur_group()` with the name of the grouping column.
+
+Using `cur_column()` and `cur_group()` jointly, we can also modify each column for a different value depending on the group.
+
+```{r, df_print = "paged"}
+(mod_tbl2 <- tibble("Column" = c("Quantity", "Price"),
+                    "France" = c(2, 10),
+                    "Italy" = c(10, 5),
+                    "Germany" = c(5, 2)))
+```
+```{r}
+df %>%
+  filter(Country %in% c("France", "Italy", "Germany")) %>%
+  select(Country, Quantity, Price) %>%
+  group_by(Country) %>%
+  mutate(across(c(Quantity, Price), ~ .x * unlist(mod_tbl2[mod_tbl2$Column == cur_column(), cur_group()$Country]), .names = "Mod_{.col}"))
+```
+
+It is important that we reduce the tibble to a vector with `unlist()`, otherwise `across()` would return list columns of data frames,
+
+```{r}
+df %>%
+  filter(Country %in% c("France", "Italy", "Germany")) %>%
+  select(Country, Quantity, Price) %>%
+  group_by(Country) %>%
+  mutate(across(c(Quantity, Price), ~ .x * mod_tbl2[mod_tbl2$Column == cur_column(), cur_group()$Country], .names = "Mod_{.col}"))
+```
+
+that we could unpack, but they don't present the desired output (for every group, the first row is recycled along its size).
+
+```{r}
+df %>%
+  filter(Country %in% c("France", "Italy", "Germany")) %>%
+  select(Country, Quantity, Price) %>%
+  group_by(Country) %>%
+  mutate(across(c(Quantity, Price), ~ .x * mod_tbl2[mod_tbl2$Column == cur_column(), cur_group()$Country], .names = "Mod_{.col}", .unpack = TRUE))
+```
+
+# - *using pick() instead*
+
+tidy-select
+
+As we've seen before, `across()` can be used with the function argument left empty.   
+In this way it will just return, with specific verbs, the columns selected.
+
+```{r}
+df %>% 
+  reframe(across(c(Quantity, Price)))
+df %>% 
+  mutate(across(c(Quantity, Price)))
+```
+
+For these tasks is better to use `pick()` though, because, being that its only purpose, we can list columns without wrapping them in `c()`.
+
+```{r}
+df %>% 
+  reframe(pick(Quantity, Price))
+df %>% 
+  mutate(pick(Quantity, Price))
+```
+
+Like `across()`, `pick()` returns a data frame, so it can be used to feed one into a function.
+
+```{r}
+df %>%
+  group_by(pick(starts_with("c")))
+df %>%
+  distinct(pick(2, 3))
+df %>%
+  count(pick(1, StockCode))
+df %>%
+  slice_min(pick(Quantity, StockCode), n = 4)
+```
+
+And likewise with grouped data frames the grouping column is never included in the selection, even if it satisfies the selecting condition.
+
+```{r}
+df %>%
+  group_by(`Customer ID`) %>%
+  count(pick(where(is.numeric)))
+df %>%
+  count(pick(where(is.numeric)))
+```
+
+`pick()` doesn't have any optional arguments.

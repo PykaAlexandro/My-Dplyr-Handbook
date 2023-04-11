@@ -1,0 +1,254 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+With the bind family of functions, consisting of `bind_rows()` and `bind_cols()`, we can merge data frames.
+
+# - *bind_rows()*
+
+`bind_rows()` stacks data frames vertically, by the order they are specified in the function.
+
+```{r}
+(df_first_rows <- slice_head(df, n = 5))
+(df_second_rows <- slice_tail(df, n = 5))
+bind_rows(df_first_rows, 
+          df_second_rows)
+```
+
+`bind_rows()` uses their names to bind the columns with each other, so if there are columns' names that are not shared, like `Invoice_copy` in `df_first_rows` for example, that column will get NAs in the rows of the data frame where it is not present.
+
+```{r}
+bind_rows(df_first_rows %>%
+            mutate(Invoice_Copy = Invoice, .after = "Invoice"), 
+          df_second_rows)
+```
+
+One frequent occasion of this event is when one data frame has less columns.
+
+```{r}
+bind_rows(df_first_rows %>% 
+            select(2:8), 
+          df_second_rows)
+bind_rows(df_first_rows, 
+          df_second_rows %>%
+            select(2:8))
+```
+
+Notice how in the first example the missing column has been moved last: this is because the output's columns' order is taken from the first data frame.
+
+In the most extreme case, where there are no shared columns' names, we will still get an output even if the data frames don't share any column.
+
+```{r}
+bind_rows(df_first_rows %>% 
+            select(Country),
+          df_second_rows %>% 
+            select(Invoice))
+```
+
+The type of columns must be the same to do the merging.
+
+```{r, error = TRUE}
+bind_rows(df_first_rows %>% 
+            mutate(`Customer ID` = as.character(`Customer ID`)), 
+          df_second_rows)
+```
+
+As already seen, the order of the columns is inherited from the first data frame.
+
+```{r}
+bind_rows(df_first_rows %>% 
+            select(8:1), 
+          df_second_rows)
+bind_rows(df_first_rows, 
+          df_second_rows  %>% 
+            select(8:1)) 
+```
+
+`bind_rows()` can also be used to merge together a list of data frames.
+
+```{r}
+group_split(df, Country) %>%
+  bind_rows()
+```
+
+We can also merge data frames with vectors
+
+```{r}
+bind_rows(df_first_rows,
+          c(Country = "222", StockCode = "222222"))
+```
+
+or vectors with vectors,
+
+```{r}
+bind_rows(c(Country = "111", StockCode = "111111"),
+          c(Country = "222", StockCode = "222222"))
+```
+
+just as long as they are named though.
+
+```{r, error = TRUE}
+bind_rows(df_first_rows,
+          c("222", "222222"))
+bind_rows(c("111", "111111"),
+          c("222", "222222"))
+```
+  
+If they don't share names we will get NAs for the non-matching columns, as with data frames.
+
+```{r}
+bind_rows(df_first_rows,
+          c(Country = "222", StockPosition = "222222"))
+bind_rows(df_first_rows,
+          c(StockPosition = "222222"))
+bind_rows(c(Country = "111", StockPosition = "111111"),
+          c(Country = "222", StockCode = "222222"))
+```
+
+## - *.id*
+
+We can identify from which data frame every row comes from with the `.id` argument, which will create a new column with a name of our choice.
+
+```{r}
+bind_rows(df_first_rows, df_second_rows, .id = "N_of_df")
+```
+
+The default way to differentiate the data frames is a progressive number but if the arguments of `bind_rows()` are named those will be used instead.
+
+```{r}
+bind_rows("number_one" = df_first_rows, 
+          "number_two" = df_second_rows, .id = "N_of_df")
+```
+
+# - *bind_cols()*
+
+`bind_cols()` merges data frames horizontally.
+
+```{r}
+(df_first_cols <- select(df, 1:4))
+(df_second_cols <- select(df, 5:8))
+bind_cols(df_first_cols, 
+          df_second_cols)
+```
+
+With this function the matching happens by row indexes, meaning that row index 1 of `df_first_cols` will bind with row index 1 of `df_second_cols`.
+
+Consequently, the number of rows must either be the same or at least one data frame's number of rows must be equal to one, in which case that row will be recycled. 
+
+```{r}
+bind_cols(df_first_cols %>% 
+            slice(1), 
+          df_second_cols)
+```
+
+Divisors are not recycled.
+
+```{r, error = TRUE}
+bind_cols(df_first_cols %>% 
+            slice(1:2), 
+          df_second_cols %>% 
+            slice(1:4))
+```
+
+If we want to `bind_cols()` two data frames that have the same columns' names, the function will add numeric suffixes to differentiate.
+
+```{r}
+bind_cols(df_first_rows %>% 
+            slice(1:4),
+          df_second_rows %>% 
+            slice(1:4))
+```
+
+## - *.name_repair* 
+
+the `.name_repair` argument can change how this works (check https://tibble.tidyverse.org/reference/as_tibble.html and https://vctrs.r-lib.org/reference/vec_as_names.html for further details).
+
+We can merge a data frame with a column, but that has to be named.
+
+```{r}
+bind_cols(df_first_cols, 
+          "Customer ID" = df$`Customer ID`)
+```
+
+Otherwise the column name will be dictated by the `.name_repair` default.
+
+```{r}
+bind_cols(df_first_cols, 
+          df$`Customer ID`)
+```
+
+# - *with group_by()*
+
+In case of grouped data frame, the output will inherit the groups of the first one.
+
+```{r}
+bind_rows(df_first_rows %>%
+            group_by(Country), 
+          df_second_rows %>%
+            group_by(`Customer ID`))
+bind_cols(df_first_cols %>%
+            group_by(StockCode),
+          df_second_cols %>%
+            group_by(Country))
+```

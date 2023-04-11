@@ -1,0 +1,200 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+# - *fundamentals*
+
+With `if_else()` we can classify the elements of a vector
+
+```{r, df_print = "paged"}
+(x <- c(1, 2, 2, 3))
+```
+
+by testing a condition on each one of them.
+
+```{r, df_print = "paged"}
+x == 1
+```
+
+The first argument is the test, then we need to input the classes that satisfy the TRUE and FALSE outputs.
+
+```{r, df_print = "paged"}
+if_else(x == 1, "1", "not1")
+```
+
+The type of these two classes must be the same.
+
+```{r, error = TRUE, df_print = "paged"}
+if_else(x == 1, 1, "not1")
+```
+
+If an element of the vector doesn't satisfy neither class, 
+
+```{r, df_print = "paged"}
+(xNA <- c(x, NA))
+xNA == 1
+```
+
+the function returns NA.
+
+```{r, df_print = "paged"}
+if_else(xNA == 1, "1", "not1")
+```
+
+# - *missing*
+
+We can change that with the `missing` argument thought, whose value must be of the same type of the other two classes.
+
+```{r, df_print = "paged"}
+if_else(xNA == 1, "1", "not1", missing = "other")
+```
+
+It is important to pay attention to NAs, as they can be evaluated to one of the two classes.
+
+```{r, df_print = "paged"}
+(y <- c(1, 8, 9))
+xNA %in% y
+if_else(xNA %in% y, TRUE, FALSE)
+```
+
+If we want to keep them as they are we can nest two `if_else()`s and use `is.na()`.
+
+```{r, df_print = "paged"}
+if_else(is.na(xNA), NA, 
+        if_else(xNA %in% y, TRUE, FALSE))
+```
+
+Even when nested, the classes must be of the same type.
+
+```{r, error = TRUE, df_print = "paged"}
+if_else(is.na(xNA), TRUE, 
+        if_else(xNA %in% y, "Yes", "No"))
+```
+
+The classes can be of the same length of the output of the test, not solely of length 1.
+
+```{r, df_print = "paged"}
+rank_1 <- c("first_is_1", "second_is_1", "third_is_1", "fourth_is_1")
+rank_not1 <- c("first_is_not1", "second_is_not1", "third_is_not1", "fourth_is_not1")
+if_else(x == 1, rank_1, rank_not1)
+```
+
+# - *ptype*
+
+With the `ptype` argument we can change the type of the output.
+
+```{r, df_print = "paged"}
+if_else(x == 1, TRUE, FALSE, ptype = integer())
+```
+
+# - *size*
+
+And with the `size` one its length, but I don't understand how it is supposed to function.
+
+```{r, error = TRUE, df_print = "paged"}
+if_else(x == 1, TRUE, FALSE, size = 8)
+if_else(x[1] == 1, TRUE, FALSE, size = 4)
+```
+
+# - *usage with a data frame*
+
+With a data frame, `if_else()` is useful to create new columns.
+
+```{r, df_print = "paged"}
+EU <-  c("Austria", "Belgium", "Channel Islands", "Cyprus", "Denmark", "EIRE", "Finland", "France", "Germany", 
+         "Greece", "Iceland", "Italy", "Lithuania", "Malta", "Netherlands", "Norway", "Poland", "Portugal", 
+         "Spain", "Sweden", "Switzerland")
+```
+```{r}
+df %>%
+  mutate(in_EU = if_else(Country %in% EU, TRUE, FALSE), .keep = "used")
+```
+
+It is important that the output of `if_else()` is either of length 1 or of the same size as the number of rows of the data frame, otherwise we would get an error.
+
+```{r, error = TRUE}
+df %>%
+  mutate(is_EU = if_else(EU %in% Country, TRUE, FALSE))
+```
+
+The test can be specified with expressions.
+
+```{r}
+df %>%
+  mutate(High_Rank_Price = if_else(min_rank(Price) < 4, TRUE, FALSE), .keep = "used")
+```
+
+# - *with group_by()*
+
+When the data frame is grouped the tests are performed group-wise, so with specific ones the output may vary between groups.
+
+For instance a `Price` of 4.25 is in the following example labeled as "Expensive" for Germany (row 32) but not for United Kingdom.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Local_Avg_Price = mean(Price),
+         Exp_Item = if_else(Price > mean(Price), "Expensive", "Not Expensive"), .keep = "used") %>%
+  filter(between(Price, 4.189418, 4.543470))
+```

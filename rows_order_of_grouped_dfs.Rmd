@@ -1,0 +1,202 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+When applying a verb to a grouped data frame, the rows' order of the output can be modified, most frequently by arranging them by the grouping columns. The grouping columns can be retrieved at any time using `group_keys()`, a grouped data frames utility function.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  group_keys()
+```
+
+This page will then serve as a brief memory aid to consult when in doubt about a specific verb behavior. More information can be found in each verb specific page or in the `group_by() / .by` one. Among the main verbs, `select()`, `rename()` and`relocate()` will not be discussed here as the manipulations they perform don't affect the rows' order.
+
+# - *filter()*
+
+`filter()` doesn't arrange the output by the grouping columns.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(row_number() <= 5)
+```
+
+# - *arrange()*
+
+`arrange()` ignores the grouping, therefore the new row order will be dictated only by the verb itself.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  arrange(desc(row_number()))
+```
+
+# - *slice()*
+
+`slice()` and its helpers rearrange the output by the grouping columns,
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  slice(1:5)
+```
+
+except when we use the `.by` argument, as in this case the original row order will be preserved.
+
+```{r}
+df %>%
+  slice(1:5, .by = Country)
+```
+
+# - *mutate()*
+
+`mutate()` doesn't modify the rows' order.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Avg_Price = mean(Price))
+```
+
+# - *summarise()*
+
+`summarise()` arranges the rows by the grouping columns when using `group_by()`, 
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(Avg_Price = mean(Price))
+```
+
+and preserves the original order with `.by`.
+
+```{r}
+df %>%
+  summarise(Avg_Price = mean(Price), .by = Country)
+```
+
+# - *reframe()*
+
+`reframe()` behaves like `summarise()`, arranging the rows by the grouping columns when using `group_by()`, 
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  reframe(Price_Quantile_Value = quantile(Price, c(0.25, 0.75)), prob = c(0.25, 0.75))
+```
+
+and preserving the original order with `.by`.
+
+```{r}
+df %>%
+  reframe(Price_Quantile_Value = quantile(Price, c(0.25, 0.75)), prob = c(0.25, 0.75), .by = Country)
+```
+
+# - *count()*
+
+`count()` outputs a data frame ordered by the grouping columns; ties within them are resolved by the values of the argument fed to the verb.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  count(Price)
+```
+
+# - *tally()*
+
+`tally()` reorders the output by the grouping columns.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  tally()
+```
+
+# - *distinct()*
+
+`distinct()` doesn't rearrange the rows by the grouping columns.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  distinct(Price)
+```
+
+<br>
+
+So, to summarise, the verbs that don't modify the rows' order by the grouping columns are `filter()`, `arrange()`, `mutate()` and `distinct()`.   
+The ones that do are `slice()`, `summarise()`, `reframe()`, `count()` and `tally()`. For the first three the rows' order is not modified if we use `.by`.
+
+<br>
+
+# - *grouped or ungrouped output?*
+
+Beside the rows' order, some verbs differ as well in regard to maintaining the outputted data frame grouped or not.
+
+As could be gathered from previous examples, the verbs that keep the data frame grouped are `filter()`, `arrange()`, `slice()`, `mutate()`, `count()` and `distinct()`. `select()`, `rename()` and `relocate()` have this behavior as well.
+
+`summarise()` instead removes the last grouping column, so if there is only one the data frame is returned ungrouped. `reframe()` removes all grouping columns, and `tally()`, being a wrapper for `summarise(n = n())` behaves like the aforementioned verb.
+
+If we use `.by` for grouping, the output will always be ungrouped, as that is the purpose of that argument, to group only for the operation it is used for.

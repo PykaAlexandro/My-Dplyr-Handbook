@@ -1,0 +1,174 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+# - *fundamentals*
+
+`consecutive_id()` is a function that augments a counter every time there is a change in the sequence of elements, in the form of a vector, we feed into it.
+The counter starts from 1.
+
+```{r, df_print = "paged"}
+consecutive_id(c(1, 2, 1, 3, 4, 3))
+```
+
+As long there is a change, the value of the elements is irrelevant.
+
+```{r, df_print = "paged"}
+consecutive_id(c(0, 1, 0, 1, 0, 1))
+```
+
+NAs are not ignored 
+
+```{r, df_print = "paged"}
+consecutive_id(c(0, 1, 0, NA, 1))
+```
+
+and, when consecutive, they are treated as the same value.
+
+```{r, df_print = "paged"}
+consecutive_id(c(0, 1, 0, NA, NA, 1))
+```
+
+# - *usage with a data frame*
+
+`consecutive_id()` comes useful when we want to `group_by()` on distinct sequences made by the same group, like the consecutive purchases made by a customer.
+
+```{r}
+df %>%
+  mutate(Invoice = Invoice,
+         id = consecutive_id(`Customer ID`), .after = "Invoice", .keep = "used")
+```
+
+In this way `id` will only augment when the value in the `Customer ID` column changes, so two consecutive invoices, made by the same customer, will have the same `id` (like invoice 489434 and 489435 for customer 13085).
+
+We can then use `id` as a grouping column to calculate for example the total quantity of these consecutive purchases.
+
+```{r}
+df %>%
+  mutate(id = consecutive_id(`Customer ID`), .after = "Invoice") %>%
+  group_by(id, `Customer ID`) %>%
+  summarise(Cons_Purch_Total_Quantity = sum(Quantity))
+```
+
+If we didn't `group_by(id)` as well, we would have obtained the global total quantity for each customer.
+
+```{r}
+df %>%
+  group_by(`Customer ID`) %>%
+  summarise(Total_Quantity = sum(Quantity))
+```
+
+Notice the difference with customer 13085 for example.
+
+```{r}
+df %>%
+  group_by(`Customer ID`) %>%
+  summarise(Total_Quantity = sum(Quantity)) %>%
+  filter(`Customer ID` == 13085)
+```
+
+With `consecutive_id()` we can isolate consecutive runs of unique values in a column then.
+
+# - *multiple sequences*
+
+`consecutive_id()` accepts multiple sequences as well, as long as they are of the same length.
+As they are inspected in parallel and not one after the other, to increase the counter it is sufficient the change in value in one of them.
+
+```{r, df_print = "paged"}
+consecutive_id(c(0, 0, 1, 1), 
+               c(0, 1, 0, 1))
+```
+
+We can take advantage of this feature by imagining that our data frame didn't come with the `Invoice` column, and somehow recreate it by feeding `InvoiceDate` and `Customer ID` to `consecutive_id()`.
+
+```{r}
+df %>%
+  filter(!is.na(`Customer ID`)) %>%
+  mutate(Invoice = Invoice,
+         id = consecutive_id(InvoiceDate, `Customer ID`), .after = "Invoice", .keep = "used")
+```
+
+As long as every `Invoice` has a different time stamp (and there are no consecutive NAs in the columns processed), `id` will have the same increments as `Invoice`.
+
+```{r}
+df %>%
+  filter(!is.na(`Customer ID`)) %>%
+  mutate(id = consecutive_id(InvoiceDate, `Customer ID`),
+         id_Invoice = consecutive_id(Invoice), .after = "Invoice", .keep = "used") %>%
+  filter(id != id_Invoice)
+```
+
+# - *with group_by()*
+
+On a grouped data frame `consecutive_id()` creates a counter for every group.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(id = consecutive_id(Invoice), .after = "Invoice", .keep = "used")
+df %>%
+  group_by(Country) %>%
+  mutate(id = consecutive_id(Invoice), .after = "Invoice") %>%
+  distinct(Country, id)
+```

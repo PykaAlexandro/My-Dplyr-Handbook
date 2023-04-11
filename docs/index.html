@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="" />
+
+
+<title>index.knit</title>
+
+<script src="site_libs/header-attrs-2.24/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/spacelab.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.13.2/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before, .tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "\e259";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "\e258";
+  font-family: 'Glyphicons Halflings';
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+.tocify-subheader {
+  display: inline;
+}
+.tocify-subheader .tocify-item {
+  font-size: 0.95em;
+}
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-inverse  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">My dplyr handbook</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Rows manipulation
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="./filter.html">filter()</a>
+    </li>
+    <li>
+      <a href="./arrange.html">arrange()</a>
+    </li>
+    <li>
+      <a href="./slice.html">slice()</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Columns manipulation
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="./select_rename_relocate.html">select(), rename() &amp; relocate()</a>
+    </li>
+    <li>
+      <a href="./mutate.html">mutate()</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Grouping operations
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="./group_by_by.html">group_by() / .by</a>
+    </li>
+    <li>
+      <a href="./grouped_data_frames_utility_functions.html">grouped data frames utility functions</a>
+    </li>
+    <li>
+      <a href="./summarise_reframe.html">summarise() &amp; reframe()</a>
+    </li>
+    <li>
+      <a href="./count.html">count()</a>
+    </li>
+    <li>
+      <a href="./tally.html">tally()</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Window functions
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="./ranking_and_ordering_functions.html">introduction, ranking &amp; ordering functions</a>
+    </li>
+    <li>
+      <a href="./offset_functions.html">offset functions</a>
+    </li>
+    <li>
+      <a href="./cumulative_aggregates.html">cumulative aggregates</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    across(), rowwise() &amp; nest_by()
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="./across_pick.html">across() &amp; pick()</a>
+    </li>
+    <li>
+      <a href="./rowwise.html">rowwise()</a>
+    </li>
+    <li>
+      <a href="./nest_by.html">nest_by()</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    distinct(), pull(), glimpse() &amp; consecutive_id()
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="./distinct.html">distinct()</a>
+    </li>
+    <li>
+      <a href="./pull.html">pull()</a>
+    </li>
+    <li>
+      <a href="./glimpse.html">glimpse()</a>
+    </li>
+    <li>
+      <a href="./consecutive_id.html">consecutive_id()</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    if_else(), case_when, case_match(), coalesce() &amp; na_if()
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="./if_else.html">if_else()</a>
+    </li>
+    <li>
+      <a href="./case_when_case_match.html">case_when &amp; case_match()</a>
+    </li>
+    <li>
+      <a href="./coalesce.html">coalesce()</a>
+    </li>
+    <li>
+      <a href="./na_if.html">na_if()</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Two tables verbs
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="./bind.html">bind_rows() &amp; bind_cols()</a>
+    </li>
+    <li>
+      <a href="./rows.html">rows_*()</a>
+    </li>
+    <li>
+      <a href="./set_operations.html">set operations</a>
+    </li>
+  </ul>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Addendum
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="./tidy-select_data-masking.html">tidy-select &amp; data-masking</a>
+    </li>
+    <li>
+      <a href="./magrittr_operators.html">magrittr's operators</a>
+    </li>
+    <li>
+      <a href="./rows_order_of_grouped_dfs.html">rows' order of grouped_dfs</a>
+    </li>
+    <li>
+      <a href="./any_all_variants.html">any(), all() &amp; their variants</a>
+    </li>
+    <li>
+      <a href="./dealing_with_NAs.html">dealing with NAs</a>
+    </li>
+  </ul>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+
+</div>
+
+
+<div id="motivation" class="section level1">
+<h1>- <em>MOTIVATION</em></h1>
+<p>This site started after the release of <code>dplyr</code> 1.0.0 in
+2020, in the form of a Rmarkdown where I noted down the changes from
+previous versions.</p>
+<p>During the years that Rmarkdown grew bigger and bigger, both in size
+and in scope, not being anymore a changelog of updates but also
+containing the basics of various functions.</p>
+<p>At the end of 2022 I decided to restructure the file, to give it more
+utility and also to ease its consultation. The end result of that
+process is this site, as along the weeks I decided to be very throughout
+and detailed about all the functions that exist in the package.</p>
+<p>It was both a way to challenge myself in producing helpful technical
+resources in a language that is not my mother tongue and to further my
+knowledge of <code>dplyr</code> and of <code>R</code> at large, as I
+feel that it is the main tool for a Data Analyst like myself.</p>
+<p>This site went through many revisions and verification, still
+mistakes and typos can always occur. I apologize if those will cause
+troubles, or if my general elaboration is not sufficiently clear for a
+complete understanding of the subjects discussed.</p>
+</div>
+<div id="intended-audience" class="section level1">
+<h1>- <em>INTENDED AUDIENCE</em></h1>
+<p>The intended audience was… myself, as I planned to use this blog as a
+personal reference guide for when I have doubts.</p>
+<p>Writing it though I was as well imagining a reader that has little
+knowledge about <code>dplyr</code> and wants to deepen their
+acquaintance with the package.</p>
+<p>It is my way to give back to the community, to which I am extremely
+grateful as it was thanks to similar efforts of others that I could land
+my first job in the Data Analysis field.</p>
+<p>This site is not a course though, as in every page I may use concepts
+explained in some other pages so for somebody that wants to learn
+<code>dplyr</code> from 0 I feel that this would not be the best place
+to start.</p>
+</div>
+<div id="style" class="section level1">
+<h1>- <em>STYLE</em></h1>
+<p>With that intended audience in mind, I strove to be as clear and
+intelligible as possible, through the following means:<br />
+- one information/concept at a time<br />
+- an easy example after every information/concept provided<br />
+- using the same variables in different examples<br />
+- common language instead of technical one, like I always used column
+and row instead of variable and observation, never x and y when
+referring to objects and so on and so forth.</p>
+<p>About the site’s visual presentation, I kept it simple and clean,
+also because I didn’t nor don’t want to spend too much time on it.</p>
+</div>
+<div id="missing-topics" class="section level1">
+<h1>- <em>MISSING TOPICS</em></h1>
+<p>I did not address remote table verbs (<a
+href="https://dplyr.tidyverse.org/reference/index.html#remote-tables"
+class="uri">https://dplyr.tidyverse.org/reference/index.html#remote-tables</a>)
+and joining functions (<a
+href="https://dplyr.tidyverse.org/articles/two-table.html"
+class="uri">https://dplyr.tidyverse.org/articles/two-table.html</a>).<br />
+For the latter, that is because <code>dplyr</code> 1.1.0 introduced many
+changes that I feel I need more working experience to be comfortable
+discussing them.</p>
+</div>
+<div id="the-data-frame" class="section level1">
+<h1>- <em>THE DATA FRAME</em></h1>
+<p>I always used the same data frame for all the examples provided, as I
+think that keeping that as a constant reduce the cognitive load when
+learning new concepts.</p>
+<p>The data frame I used can be found here: <a
+href="https://archive.ics.uci.edu/ml/datasets/Online+Retail+II"
+class="uri">https://archive.ics.uci.edu/ml/datasets/Online+Retail+II</a></p>
+<p>and I chose it primarily for a personal convenience as I was already
+using it for another project of mine.</p>
+</div>
+<div id="shortcomings" class="section level1">
+<h1>- <em>SHORTCOMINGS</em></h1>
+<p>In some pages (the one for <code>filter()</code> for example) the
+side menu has too many elements, so the last ones can’t be accessed and
+the only solution is to scroll to the end of the page. I apologize for
+that.</p>
+</div>
+<div id="ackownledgements" class="section level1">
+<h1>- <em>ACKOWNLEDGEMENTS</em></h1>
+<p>I thank <a href="https://github.com/shafayetShafee"
+class="uri">https://github.com/shafayetShafee</a> that provided me with
+the code necessary to show groups information for printed data
+frames.</p>
+</div>
+<div id="contacts-information" class="section level1">
+<h1>- <em>CONTACTS INFORMATION</em></h1>
+<p>For any comment, critique or suggestion you can contact me on my
+linkedin profile.</p>
+</div>
+<div id="last-update" class="section level1">
+<h1>- <em>LAST UPDATE</em></h1>
+<p>This site was last updated on the 27th of August 2023, using the
+1.1.2 version of <code>dplyr</code>.</p>
+<p>I don’t know if I will keep this site up to date with future
+<code>dplyr</code> releases (that you can check here <a
+href="https://dplyr.tidyverse.org/news/index.html"
+class="uri">https://dplyr.tidyverse.org/news/index.html</a>), it will
+depend on current commitments and interests.</p>
+</div>
+<div id="future-endevours" class="section level1">
+<h1>- <em>FUTURE ENDEVOURS</em></h1>
+<p>Despite requiring a lot of effort, working on this site was really
+engaging, instructive and rewarding. I can see challenging myself again
+with other topics, first and foremost <code>gpplot2</code>, but for when
+and if I don’t know at this moment in time.</p>
+</div>
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = false;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

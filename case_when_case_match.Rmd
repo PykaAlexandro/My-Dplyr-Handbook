@@ -1,0 +1,323 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+# - *case_when()*
+
+We can nest several `if_else()`s if we want a column with more than two classes in the output.
+
+```{r, df_print = "paged"}
+EU <-  c("Austria", "Belgium", "Channel Islands", "Cyprus", "Denmark", "EIRE", "Finland", "France", "Germany", 
+         "Greece", "Iceland", "Italy", "Lithuania", "Malta", "Netherlands", "Norway", "Poland", 
+         "Portugal", "Spain", "Sweden", "Switzerland")
+```
+```{r}
+df %>%
+  mutate(in_EU = if_else(Country == "Unspecified", Country, 
+                         if_else(Country %in% EU, "Yes", "No")), .keep = "used")
+```
+
+But it is best to use `case_when()`, which is built for this purpose.
+It uses a formula like syntax, where on the right of `~` we specify which value to assign when the test on the left evaluates to TRUE.
+
+```{r}
+df %>%
+  mutate(in_EU = case_when(Country == "Unspecified" ~ Country,
+                           Country %in% EU ~ "Yes",
+                           !Country %in% EU ~ "No"), .keep = "used")
+```
+
+We can't specify any value for when a test evaluates to FALSE so, when an element doesn't evaluate to TRUE to any test, the output is NA.
+
+```{r}
+df %>%
+  mutate(in_EU = case_when(Country == "Unspecified" ~ Country,
+                           Country %in% EU ~ "Yes"), .keep = "used")
+```
+
+This means that, in order to not produce NAs, each element needs a test that evaluates to TRUE. 
+
+## - *.default*
+
+Sometimes that can be bothersome to do, like if we only wanted to modify the name of 2 elements, and we might also miss on some values.
+
+```{r}
+df %>%
+  mutate(New_Country = case_when(Country == "United Kingdom" ~ "UK",
+                                 Country == "EIRE" ~ "Ireland",
+                                 Country == "Austria" ~ Country,
+                                 Country == "Belgium" ~ Country,
+                                 Country == "Channel Islands" ~ Country,
+                                 Country == "Cyprus" ~ Country,
+                                 Country == "Denmark" ~ Country,
+                                 Country == "Finland" ~ Country,
+                                 Country == "France" ~ Country,
+                                 Country == "Germany" ~ Country,
+                                 Country == "Greece" ~ Country,
+                                 Country == "Iceland" ~ Country,
+                                 Country == "Italy" ~ Country,
+                                 Country == "Lithuania" ~ Country,
+                                 Country == "Malta" ~ Country,
+                                 Country == "Netherlands" ~ Country,
+                                 Country == "Norway" ~ Country,
+                                 Country == "Poland" ~ Country,
+                                 Country == "Portugal" ~ Country,
+                                 Country == "Spain" ~ Country,
+                                 Country == "Sweden" ~ Country,
+                                 Country == "Switzerland" ~ Country), .keep = "used") %>%
+  arrange(Country != "Bahrain")
+```
+
+So we can use the `.default` argument for assigning a value of choice instead of NA.
+
+```{r}
+df %>%
+  mutate(New_Country = case_when(Country == "United Kingdom" ~ "UK",
+                                 Country == "EIRE" ~ "Ireland", .default = Country), .keep = "used") %>%
+  arrange(Country != "Bahrain")
+```
+
+NAs in the input are treated as FALSE, therefore they will return NAs (i.e. row 12).
+
+```{r}
+df %>%
+  filter(StockCode == "85166B") %>%
+  mutate(Country = na_if(Country, "Unspecified"),
+         is_UK = case_when(!Country == "United Kingdom" ~ "No",
+                           Country == "United Kingdom" ~ "Yes"), .keep = "used")
+```
+
+But we can again use the `.default` argument to change them to a value of choice,
+
+```{r}
+df %>%
+  filter(StockCode == "85166B") %>%
+  mutate(Country = na_if(Country, "Unspecified"),
+         is_UK = case_when(!Country == "United Kingdom" ~ "No",
+                           Country == "United Kingdom" ~ "Yes", .default = "not available"), .keep = "used")
+```
+
+or alternatively write a test just for them.
+
+```{r}
+df %>%
+  filter(StockCode == "85166B") %>%
+  mutate(Country = na_if(Country, "Unspecified"),
+         is_UK = case_when(is.na(Country) ~ "not available",
+                           !Country == "United Kingdom" ~ "No",
+                           Country == "United Kingdom" ~ "Yes"), .keep = "used")
+```
+
+## - *order of evaluation*
+
+As the tests are evaluated in order, it is important to start from the more particular one and then generalize, to avoid misclassifications when an element can pertain to more than one class, like "Unspecified" here.
+
+```{r}
+df %>%
+  mutate(is_EU = case_when(Country == "Unspecified" ~ Country,
+                           Country %in% EU ~ "Yes",
+                           !Country %in% EU ~ "No")) %>% 
+  count(is_EU, sort = TRUE)
+```
+
+Because, if we had put the "No" condition before the "Unspecified" one, we would have had a column without the "Unspecified" value, as "Unspecified" doesn't appear in `EU` so it would have been classified as "No".
+
+```{r}
+df %>%
+  mutate(is_EU = case_when(Country %in% EU ~ "Yes",
+                           !Country %in% EU ~ "No",
+                           Country == "Unspecified" ~ Country)) %>% 
+  count(is_EU)
+```
+
+When present, `.default` is evaluated last.
+
+As with `if_else()`, the length of the classes must be consistent across all tests and equal to the number of rows of the data frame or to 1.
+
+It is also important that the length of the logical vectors outputted by the tests are all of the same size (in the second test of the following example that is not the case).
+
+```{r, error = TRUE}
+df %>%
+  mutate(is_EU = case_when(Country == "Unspecified" ~ Country,
+                           EU %in% Country ~ "Yes",
+                           !Country %in% EU ~ "No"))
+```
+
+All the elements of the new column must be of the same type as well.
+
+```{r, error = TRUE}
+df %>%
+  mutate(is_EU = case_when(Country == "Unspecified" ~ Country,
+                           Country %in% EU ~ TRUE,
+                           !Country %in% EU ~ FALSE))
+```
+
+As with `if_else()`, NAs can be evaluated to one of the classes.
+
+```{r}
+df %>%
+  mutate(Country = na_if(Country, "Unspecified")) %>%
+  mutate(is_EU = case_when(Country %in% EU ~ "Yes",
+                           !Country %in% EU ~ "No"), .keep = "used") %>%
+  arrange(!is.na(Country))
+```
+
+If this goes against our wishes, we need to add another test just for them.
+
+```{r}
+df %>%
+  mutate(Country = na_if(Country, "Unspecified")) %>%
+  mutate(is_EU = case_when(is.na(Country) ~ NA,
+                           Country %in% EU ~ "Yes",
+                           !Country %in% EU ~ "No"), .keep = "used") %>%
+  arrange(!is.na(Country))
+```
+
+As `case_when()` first evaluates all of the classes for all of the elements to be tested, we might get messages that don't seem to apply to our situation, like here where the evaluation of `sqrt(Quantity)` produces NaNs for negative values, NaNs that won't be in the final output though as for those `case_when()` will assign a 0.
+
+```{r}
+df %>%
+  mutate(New_Quantity = case_when(Quantity > 0 ~ sqrt(Quantity),
+                                  Quantity <= 0 ~ 0), .keep = "used") %>%
+  arrange(Quantity)
+```
+
+We can use expressions not only for the classes but also for the tests.
+
+```{r}
+df %>%
+  mutate(New_Quantity = case_when(Quantity / 2 > 0 ~ sqrt(Quantity),
+                                  Quantity <= 0 ~ 0), .keep = "used")
+```
+
+## - *.ptype*
+
+With the `.ptype` argument we can change the type of the output.
+
+```{r}
+df %>%
+  filter(StockCode == "72781") %>%
+  mutate(Country = na_if(Country, "Unspecified")) %>%
+  mutate(is_EU = case_when(is.na(Country) ~ NA,
+                           Country %in% EU ~ TRUE,
+                           !Country %in% EU ~ FALSE, .ptype = integer()), .keep = "used")
+```
+
+## - *.size*
+
+And with the `.size` one we can override its length, for example to recycle an unitary test output to the length of the data frame.
+
+```{r}
+df %>%
+  mutate(New_Col = case_when(1 == 1 ~ TRUE, .size = nrow(df)), .keep = "used")
+```
+
+# - *case_match()*
+
+Thanks to `case_match()` we can simplify the following example,
+
+```{r}
+df %>%
+  mutate(Language = case_when(Country %in% c("Austria", "Germany") ~ "Germanic",
+                              Country %in% c("France", "Italy", "Portugal", "Spain") ~ "Romance",
+                              Country %in% c("Australia", "EIRE", "United Kingdom", "USA") ~ "English",.default = Country), .keep = "used")
+```
+
+into this, basically substituting the tests with the values used for matchmaking.
+Notice how the first argument of the function is the column.
+
+```{r}
+df %>%
+  mutate(Language = case_match(Country,
+                               c("Austria", "Germany") ~ "Germanic",
+                               c("France", "Italy", "Portugal", "Spain") ~ "Romance",
+                               c("Australia", "EIRE", "United Kingdom", "USA") ~ "English", .default = Country), .keep = "used")
+```
+
+## - *.default / .ptype*
+
+As seen in the previous example, we can use the `.default` argument with `case_match()`.  
+Furthermore, it has a `.ptype` argument as well.
+
+```{r}
+df %>%
+  mutate(English_Language = case_match(Country,
+                                       c("Australia", "EIRE", "United Kingdom", "USA") ~ TRUE, .default = FALSE, .ptype = integer()), .keep = "used")
+```
+
+# - *with group_by()*
+
+When the data frame is grouped the tests are performed group-wise, so with specific ones the conditions may vary between groups.
+
+For instance a `Price` of 4.25 is in the following example labeled as "Expensive" for Germany (row 32) but not for United Kingdom.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Local_Avg_Price = mean(Price),
+         Exp_Item = case_when(Price > mean(Price) ~ "Expensive", 
+                              Price == mean(Price) ~ "Average",
+                              Price < mean(Price) ~ "Not Expensive"), .keep = "used")  %>%
+  filter(between(Price, 4.189418, 4.543470))
+```

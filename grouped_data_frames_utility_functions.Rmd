@@ -1,0 +1,588 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+We will here discuss several functions that are useful with grouped data frames.
+
+# - *group_split()*
+
+This function divides the groups of a grouped data frame into separate tibbles.
+
+```{r, df_print = "paged"}
+df %>%
+  slice(1:100) %>%
+  group_by(Country) %>%
+  group_split()
+df %>%
+  slice(1:100) %>%
+  group_by(Country, `Customer ID`) %>%
+  group_split()
+```
+
+The output is a list, arranged by the grouping columns, so every data frame can be accessed with the correct subsetting (based on indexes as the list is not named.)
+
+```{r}
+dfs_list <- df %>%
+  slice(1:100) %>%
+  group_by(Country) %>%
+  group_split()
+dfs_list[[1]]
+```
+
+We can modify that by using `setNames()` though.
+
+```{r, df_print = "paged"}
+(named_dfs_list <- df %>%
+  slice(1:100) %>%
+  group_by(Country) %>%
+  group_split() %>%
+  setNames(unique(sort(df[1:100, ]$Country))))
+```
+```{r}
+named_dfs_list[["France"]]
+```
+
+If we want to merge the data frames back, we can use `bind_rows()`.
+
+```{r}
+bind_rows(dfs_list)
+```
+
+The rows' order might be different from the original data frame's one as it is dictated by the grouping columns.
+
+The function can be used directly without having to `group_by()` first,
+
+```{r, df_print = "paged"}
+df %>%
+  slice(1:100) %>%
+  group_split(Country)
+```
+
+also with expressions.
+
+```{r, df_print = "paged"}
+df %>%
+  slice(1:10) %>%
+  group_split(Price_Rank = dense_rank(Price))
+```
+
+## - *.keep*
+
+There is a `.keep` argument that controls whether to keep or not the grouping columns inside the tables, the default is TRUE.
+
+```{r}
+dfs_list_keep <- df %>%
+  slice(1:100) %>%
+  group_by(Country) %>%
+  group_split(.keep = FALSE)
+dfs_list_keep[[1]]
+```
+
+# - *group_nest()*
+
+`group_nest()` condenses a grouped data frame into a list column with one row for every combination of the grouping columns.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  group_nest()
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  group_nest()
+```
+
+Every tibble of the list column contains the rows relative to that combination of the grouping columns.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  group_nest() %>%
+  select(data) %>%
+  slice(1) %>%
+  tidyr::unnest(cols = c(data))
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  group_nest() %>%
+  select(data) %>%
+  slice(1) %>%
+  tidyr::unnest(cols = c(data))
+```
+
+It can be used directly on an ungrouped data frame as well.
+
+```{r}
+df %>%
+  group_nest(Country)
+```
+
+We can unnest to the original data frame with the relative function from `tidyr`, but the rows' order will be different, following the one of grouping columns.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  group_nest() %>%
+  tidyr:::unnest(cols = c(data))
+```
+
+We can nest by expressions.
+
+```{r}
+df %>%
+  slice(1:100) %>%
+  group_nest(Price_Rank = dense_rank(Price))
+```
+
+## - *.key*
+
+The function has two optional arguments: with `.key` we can change the name of the list column.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  group_nest(.key = "list column")
+```
+
+## - *keep*
+
+And with `keep` we decide whether or not to keep the grouping columns in the list column's tibbles (the default is FALSE, not keeping them).
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  group_nest() %>%
+  select(data) %>%
+  slice(1) %>%
+  tidyr::unnest(cols = c(data))
+df %>%
+  group_by(Country) %>%
+  group_nest(keep = TRUE) %>%
+  select(data) %>%
+  slice(1) %>%
+  tidyr::unnest(cols = c(data))
+```
+
+Using `unnest()` on all the list column while `keep = TRUE` returns an error.
+
+```{r, error = TRUE}
+df %>%
+  group_by(Country) %>%
+  group_nest(keep = TRUE) %>%
+  tidyr::unnest(cols = c(data))
+```
+
+# - *group_trim()*
+
+`group_trim()` suppresses the levels of the factors used to `group_by()`, in case they are empty after a manipulation (in this case Lebanon).
+
+```{r}
+df %>%
+  group_by(factor(Country)) %>%
+  filter(n() > 15) %>%
+  group_trim() %>%
+  group_keys()
+```
+
+# - *group_map()/modify()/walk()*
+
+With `group_map()` we can apply a function, with a formula syntax, to every group.
+The result is a list.
+
+So if for example we want the average quantity for every country,
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(Avg_Quantity = mean(Quantity))
+```
+
+we can write:
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  group_map(~ mean(.x$Quantity))
+```
+
+`group_modify()` instead returns a data frame, so we have to use it with functions whose output is of that class.
+
+```{r}
+df %>%
+  slice(1:100) %>%
+  group_by(Country) %>%
+  group_modify(~ rows_insert(.x, tibble(Invoice = "xxxxxx"), by = "Invoice"))
+```
+
+With `group_walk()` the function we apply will only be evaluated for its possible side effects and it will always return the input `.x` unaffected.
+
+```{r}
+df %>%
+  slice(1:100) %>%
+  group_by(Country) %>%
+  group_walk(~ rows_insert(.x, tibble(Invoice = "xxxxxx"), by = "Invoice"))
+```
+
+`group_walk()` can then be used, for example, to print plots (as that is a side effect of `plot()`) in the middle of a pipe.
+
+```{r, df_print = "paged"}
+df %>%
+  slice(1:100) %>%
+  group_by(Country) %>%
+  group_walk(~ plot(.x$Quantity))
+```
+
+In all of these past examples `.x` referred to the object, that is the grouped data frame, that was piped into one of these three `group_*` functions but we can use `.y` as well when we want to refer to the grouping columns.
+
+```{r, df_print = "paged"}
+df %>%
+  slice(1:100) %>%
+  group_by(Country) %>%
+  group_map(~ paste(.x$`Customer ID`, .y))
+```
+
+All of these functions can also be used on ungrouped data frames,
+
+```{r, df_print = "paged"}
+df %>%
+  group_map(~ mean(.x$Quantity))
+```
+
+with a custom function (that needs two arguments, hence the `...`, even if they don't do nothing in this instance),
+
+```{r, df_print = "paged"}
+custfun <- function(x, ...){
+  head(x)
+}
+df %>%
+  slice(1:100) %>%
+  group_by(Country) %>%
+  group_map(custfun)
+```
+
+and they all have a `.keep` argument, to preserve the grouping columns in the output.
+
+```{r, df_print = "paged"}
+df %>%
+  slice(1:100) %>%
+  group_by(Country) %>%
+  group_map(custfun, .keep = TRUE)
+```
+
+# - *group_data()*
+
+`group_data()` stores, for each group, every row index pertaining to that group in a list column named `.rows`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  group_data()
+df %>%
+  group_by(Country) %>%
+  group_data() %>%
+  tidyr::unnest(cols = c(.rows))
+```
+
+# - *group_rows()*
+
+`group_rows()` returns the rows' indexes of every group as a list of ordered vectors.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  filter(Country %in% c("Australia", "Lebanon")) %>%
+  group_rows()
+```
+
+# - *group_keys()*
+
+`group_keys()` returns a data frame with all the unique values of the grouping columns, if one,
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  group_keys()
+```
+
+and one with as many columns as the ones specified as arguments of `group_by()`, if several.
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  group_keys()
+```
+
+In this case the number of rows depends on the number of unique existing combinations between the grouping columns.
+
+```{r}
+df %>%
+  group_by(StockCode, Description) %>%
+  group_keys()
+df %>%
+  group_by(StockCode) %>%
+  slice(1) %>%
+  group_by(StockCode, Description) %>%
+  group_keys()
+```
+
+The `group_keys()` are also what functions like `summarise()` and `slice(`) order their output by.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(Avg_Price = mean(Price))
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  summarise(Avg_Price = mean(Price))
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  slice(1)
+```
+
+# - *group_indices()*
+
+`group_indices()` returns a vector with a group identifier, in form of a digit, for every row of the data frame.
+
+```{r, df_print = "paged"}
+df %>%
+  slice(1:100) %>%
+  group_by(Country) %>%
+  group_indices()
+```
+
+The indices are not assigned randomly, but following the order of the `group_keys()`.
+
+# - *group_vars()*
+
+`group_vars()` lists the grouping columns as a vector.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  group_vars()
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  group_vars()
+```
+
+# - *groups()*
+
+`groups()` does the same, but as a list.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  groups()
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  groups()
+```
+
+# - *group_size()*
+
+`group_size()` supplies the size (as per the number of rows) of each group as a unnamed vector.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  group_size()
+```
+
+As always, the order is dictated by the `group_keys()`.
+
+# - *n_groups()*
+
+`n_groups()` supplies the overall number of groups.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  n_groups()
+```
+
+# - *context*
+
+This family of functions, to be used inside a `mutate()` or `summarise()` / `reframe()` call, provides information about the groups.
+
+## - *n()*
+
+`n()` returns the number of rows per group as a data frame.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(n = n())
+```
+
+NAs are counted as one value.
+
+```{r}
+df %>%
+  group_by(`Customer ID`) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+`n()` can be used in other functions as well,
+
+```{r}
+df %>%
+  filter(Country == "Lebanon") %>%
+  slice(n())
+```
+
+as a replacement of `nrow(df)` for when we altered the original data frame 
+
+```{r}
+df %>%
+  filter(Country == "Lebanon") %>%
+  slice(nrow(df))
+```
+
+and we don't want to use the `magrittr` dot placeholder.
+
+```{r}
+df %>%
+  filter(Country == "Lebanon") %>%
+  slice(nrow(.))
+```
+
+Here the data frame was not grouped, so `n()` provided the total number of rows, as if there was just one group.
+
+## - *cur_group()*
+
+`cur_group()` returns one tibble for every combination of the grouping variables, with every one of them containing the relative `group_keys()`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(data = cur_group())
+df %>%
+  group_by(Country) %>%
+  summarise(data = cur_group()) %>%
+  select(data) %>%
+  slice(1) %>%
+  tidyr::unnest(cols = c(data))
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  summarise(data = cur_group())
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  summarise(data = cur_group()) %>%
+  ungroup() %>%
+  select(data) %>%
+  slice(1) %>%
+  tidyr::unnest(cols = c(data))
+```
+
+We can use `cur_group()` to apply manipulations that change depending on the group they are applied to, like filtering on only one group.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(cur_group()$Country != "United Kingdom" | Quantity > 10)
+```
+
+In this example the first test checks, for every group, on whether the value of the `Country` column in the tibble provided by `cur_group()` is different from United Kingdom.
+
+In case of TRUE, we will preserve every row, regardless of the second test, as we specified an OR condition.
+
+In case of FALSE, we will preserve only the rows where the second test is TRUE, which are the ones where the `Quantity > 10` and the country is United Kingdom. 
+
+We can also filter each group for a different value.
+
+These different values must be stored in a tibble, and the correct one for each group will be accessed by subsetting it with the grouping column of the tibble returned by `cur_group()`.
+
+```{r, df_print = "paged"}
+Min_Quantity <- tibble("France" = 2,
+                       "Italy" = 10,
+                       "Germany" = 5)
+```
+```{r}
+df %>%
+  filter(Country %in% c("France", "Italy", "Germany")) %>%
+  group_by(Country) %>%
+  filter(Quantity >= Min_Quantity[[cur_group()$Country]])
+```
+
+## - *cur_group_id()*
+
+`cur_group_id()` supplies a numeric identifier for every group, assigned following the order of the `group_keys()`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(id = cur_group_id())
+```
+
+## - *cur_group_rows()*
+
+`cur_group_rows()` returns the rows indices for every row of a grouped data frame, sorted by the `group_keys()`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  reframe(row = cur_group_rows())
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  reframe(row = cur_group_rows())
+```

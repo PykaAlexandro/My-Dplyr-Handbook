@@ -1,0 +1,947 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+data-masking
+
+# - *fundamentals*
+
+`group_by()` groups together the rows of a data frame by the unique values of the columns specified in its argument, forming as many groups as the aforementioned unique values (when we group by only one column),
+
+```{r}
+df %>%
+  group_by(Country)
+```
+
+and as many as the unique existing combinations between their unique values (when we group by several ones).
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`)
+```
+
+Besides characters' ones, `group_by()` can be used on every class of columns: numeric
+
+```{r}
+df %>%
+  group_by(Price)
+```
+
+and datetime alike.
+
+```{r}
+df %>%
+  group_by(InvoiceDate)
+```
+
+It modifies the class of a data frame to `grouped_df`, but no other visible changes occur.
+
+```{r, df_print = "paged"}
+class(df %>%
+        group_by(Country))
+```
+
+When we apply a manipulation to a grouped data frame though, the manipulation is (in most of the cases) performed group-wise, meaning that only the values of the rows pertaining to a specific group are used for that group's output.
+Therefore (still, generally speaking) are returned as many results as there are groups.
+
+# - *with summarise(), mutate() & reframe()*
+
+`summarise()` might be the verb that benefits the most from a grouped data frame, as with it we can easily construct summary tables.
+
+```{r}
+df %>%
+  summarise(Avg_Price = mean(Price))
+df %>%
+  group_by(Country) %>%
+  summarise(Avg_Price = mean(Price))
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  summarise(Avg_Price = mean(Price))
+```
+
+Notice how the output is ordered by the grouping columns' (the columns we group by) values.
+
+## - *summarise() unique "peeling off" property*
+
+As can be noticed from the previous example, when we have one result per group, like when using aggregate functions, `summarise()`, after the calculation is performed, ungroups the data frame when there is only one grouping column 
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  summarise(Avg_Price = mean(Price)) %>%
+  group_vars()
+```
+
+or removes the last one added, when there are several, informing us with a message about the resulting grouping of the output.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  summarise(Avg_Price = mean(Price)) %>%
+  group_vars()
+```
+
+`mutate()` preserves the original rows' order maintaining as well their original number, adding the newly calculated values to each one of them.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Avg_Price = mean(Price))
+```
+
+There are instances though where a grouped data frame doesn't change the results of a `mutate()` call, for example if we applied a vectorized operation (like a product) instead of an aggregate function (like we did previously with `mean()`).
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Revenue = Quantity * Price, .keep = "used")
+df %>%
+  mutate(Revenue = Quantity * Price, .keep = "used")
+```
+
+This is true also for `summarise()`, but harder to see for the new rows' order dictated by the grouping column.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(Revenue = Quantity * Price)
+df %>%
+  summarise(Revenue = Quantity * Price)
+```
+
+Furthermore, as the warning suggests, for these kinds of transformations `reframe()` is a more correct verb.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  reframe(Revenue = Quantity * Price)
+df %>%
+  reframe(Revenue = Quantity * Price)
+```
+
+The other difference between `summarise()` and `reframe()` is that the latter always returns an ungrouped data frame.
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  reframe(Revenue = Quantity * Price)
+```
+
+# - *with filter()*
+
+`filter()` applies to each row a condition specific to the group it belongs to, so for instance in the next example `mean(Price)` is independently calculated for each group and the rows are preserved accordingly.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(Price > mean(Price))
+```
+
+We can see it more clearly in the following tables, where in the first one we show which rows evaluate to TRUE in the grouped and ungrouped case and in the second one the difference in the number of rows preserved.
+
+For United Kingdom for example the difference relies on the rows with a `Price` higher than `Grouped_Avg` but lower than `Ungrouped_Avg` (row 24 is the first one where this is shown), that are preserved with a grouped data frame and removed with an ungrouped one.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Grouped_Avg = mean(Price),
+         Grouped_Filter = Price > Grouped_Avg,
+         Ungrouped_Avg = mean(df$Price),
+         Ungrouped_Filter = Price > Ungrouped_Avg, .keep = "used") %>%
+  ungroup() %>%
+  relocate(Country, Price)
+df %>%
+  group_by(Country) %>%
+  mutate(Grouped_Avg = mean(Price),
+         Grouped_Filter = Price > Grouped_Avg,
+         Ungrouped_Avg = mean(df$Price),
+         Ungrouped_Filter = Price > Ungrouped_Avg, .keep = "used") %>%
+  ungroup() %>%  
+  tidyr::pivot_longer(c( "Grouped_Filter", "Ungrouped_Filter"), names_to = "Type_of_Filter", values_to = "Row") %>%
+  mutate(Row = if_else(Row == TRUE, "Rows_Preserved", "Rows_Removed")) %>%
+  count(Type_of_Filter, Row) %>%
+  tidyr::pivot_wider(names_from = "Row", values_from = "n")
+```
+
+A grouped data frame doesn't change the output when the filtering value (5 here, a constant) doesn't depend on the groups.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(Price > 5)
+df %>%
+  filter(Price > 5)
+```
+
+# - *with slice() & its helpers*
+
+`slice()` and its helpers preserve as many singular or multiples of rows (depending on the selection) as there are groups.
+Akin to `summarise()`, also `slice()` orders the output by the grouping columns.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  slice(1)
+df %>%
+  group_by(Country) %>%
+  slice(1:2)
+df %>%
+  group_by(Country) %>%
+  slice_head(n = 2)
+df %>%
+  group_by(Country) %>%
+  slice_sample(n = 2)
+df %>%
+  group_by(Country) %>%
+  slice_max(Quantity, n = 2)
+```
+
+# - *with select()*
+
+`select()` always adds the grouping columns to the selection.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  select(Price)
+```
+
+# - *with arrange()*
+
+`arrange()` ignores the grouping.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  arrange(desc(Price))
+```
+
+# - *with NAs*
+
+If there are NA values in the grouping columns, they are treated as an unique grouping value.
+
+```{r}
+df %>%
+  mutate(Country = na_if(Country, "Unspecified")) %>%
+  group_by(Country) %>%
+  summarise(n = n()) %>%
+  arrange(!is.na(Country))
+```
+
+# - *single combinations between grouping columns*
+
+With more than one column every unique existing combination of their unique values forms a group, and we generally obtain a larger number of groups the more columns we add.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(StockCode) %>%
+  n_groups()
+df %>%
+  group_by(StockCode, Description) %>%
+  n_groups()
+```
+
+But if each unique value of a column has only one combination with the unique values of the other columns (like in the following example where we removed with `group_by(StockCode) %>% slice(1)` the multiple descriptions for every stock code) when we group by those the number of groups stays constant.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(StockCode) %>%
+  slice(1) %>%
+  group_by(StockCode, Description) %>%
+  n_groups()
+```
+
+We can then use `group_by()` to "carry forward" columns.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  slice(1) %>%
+  group_by(StockCode, Description) %>%
+  summarise(Avg_Price = mean(Price))
+```
+
+This can produce a table that is more informative than the one without `Description` (the values in the `Avg_Price` column are different as here we use values that we removed with `group_by(StockCode) %>% slice(1)` in the previous example).
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  summarise(Avg_Price = mean(Price))
+```
+
+Plus that column can be used in subsequent manipulations.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  slice(1) %>%
+  group_by(StockCode, Description) %>%
+  summarise(Avg_Price = mean(Price)) %>%
+  filter(!is.na(Description))
+```
+
+Another way to achieve this could have been to use the `Description` column in the `summarise()` call.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  slice(1) %>%
+  group_by(StockCode) %>%
+  summarise(Description = Description,
+            Avg_Price = mean(Price))
+```
+
+But only if we preemptively removed the multiple descriptions for every value of `StockCode`, otherwise we wouldn't be able to obtain a `mean(Price)` for every unique value of `StockCode` as the `Description` column must be kept as is.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  summarise(Description = Description,
+            Avg_Price = mean(Price))
+```
+
+# - *grouped data frames setbacks*
+
+While using `group_by()`, we must also made sure that the grouping doesn't affect the calculation we want to perform.
+
+In this example, if we group by `Invoice` as well, we can't have the correct number of unique invoices per customer as `n_distinct(`) can only count inside each group, and with this grouping each group has just one value of `Invoice`.
+
+```{r}
+df %>%
+  group_by(`Customer ID`, Invoice) %>%
+  summarise(N_Invoices_per_Customer = n_distinct(Invoice))
+```
+
+So we need to remove `Invoice` to produce the desired result.
+
+```{r}
+df %>%
+  group_by(`Customer ID`) %>%
+  summarise(N_Invoices_per_Customer = n_distinct(Invoice))
+```
+
+# - *ungroup()*
+
+We must always be aware then of what kind of grouping our data frame has and in general it is good practice to use `ungroup()` to remove the grouping after the manipulations it was needed for, to have the intended results in subsequent ones.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Avg_Price = mean(Price)) %>%
+  select(Avg_Price)
+df %>%
+  group_by(Country) %>%
+  mutate(Avg_Price = mean(Price)) %>%
+  ungroup() %>%
+  select(Avg_Price)
+```
+
+`ungroup()` can remove one grouping at a time as well.
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  mutate(Avg_Price = mean(Price)) %>%
+  ungroup(Country) %>%
+  select(Avg_Price)
+```
+
+As `group_by()` is a data-masking function, we can conveniently group by expressions, with the `new_name = old_name` syntax if we only change the names.
+
+```{r}
+df %>%
+  group_by(CustomerID = `Customer ID`)
+```
+
+And with a `mutate()` syntax if we do so by computations.
+
+```{r}
+df %>%
+  group_by(Price_Rank = dense_rank(Price))
+```
+
+This is equivalent to the following, where the `mutate()` command is made explicit and not "hidden" inside `group_by()` so to speak.
+
+```{r}
+df %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank)
+```
+
+# - *.add*
+
+With the `.add` argument we can control whether or not to add new groups to the existing ones. 
+The default is FALSE, so normally the latest `group_by()` overrides existing groups.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  group_by(`Customer ID`) %>%
+  group_vars()
+```
+
+With `.add = TRUE` we append new groups instead.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  group_by(`Customer ID`, .add = TRUE) %>%
+  group_vars()
+```
+
+And it will be the same as using two columns to begin with.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  group_vars()
+```
+
+But with the benefit of being able to perform manipulations between the two `group_by()` calls.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Country_Avg_Price = mean(Price)) %>%
+  group_by(`Customer ID`, .add = TRUE) %>%
+  mutate(Country_Customer_Avg_Price = mean(Price)) %>%
+  select(Country_Avg_Price, Country_Customer_Avg_Price) %>%
+  filter(row_number() == 1)
+```
+
+# - *implicit & explicit mutate() calls*
+
+The default `.add = FALSE` behavior, overriding the existing groups, still stands also when we group by expressions, so the implicit, "hidden", `mutate()` command is performed on the ungrouped data frame.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  group_by(Price_Rank = dense_rank(Price))
+```
+
+Therefore the fact that we had beforehand grouped by `Country` is inconsequential here: the data frame `Price_Rank` is computed on is not grouped by `Country` (I will remove `group_by(Country)` in the following examples then, also to better distinguish the two cases presented).
+
+So in case we want to group by a newly created column (`Price_Rank` here) an already grouped data frame, we have to make the "hidden" `mutate()` command explicit.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank)
+```
+
+In this way we will group by `Price_Rank` the rows inside each `Country` specific group, resulting in a different total number of groups.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Price_Rank = dense_rank(Price)) %>%
+  n_groups()
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank) %>%
+  n_groups()
+```
+
+That is because in the first case we group by the ranks computed on the prices of all the data frame, regardless of which `Country` they pertain to, so for example the smallest rank for Australia here is 30,
+
+```{r}
+df %>%
+  group_by(Price_Rank = dense_rank(Price)) %>%
+  ungroup() %>%
+  count(Country, Price, Price_Rank)
+```
+
+as there are lower prices in other countries.
+
+```{r}
+df %>%
+  group_by(Price_Rank = dense_rank(Price)) %>%
+  ungroup() %>%
+  count(Country, Price, Price_Rank) %>%
+  arrange(Price_Rank)
+```
+
+In the second case we group by the ranks of the prices present inside each `Country`, so each `Country` ranking starts from rank 1.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank) %>%
+  ungroup() %>%
+  count(Country, Price, Price_Rank)
+```
+
+This results in a smaller number of groups, as the same `Price_Rank` is shared by different prices on different countries,
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank) %>%
+  count(Price_Rank, Price, Country)
+```
+
+Whether in the first case every unique value of the `Price` column has a dedicated rank.
+
+```{r}
+df %>%
+  group_by(Price_Rank = dense_rank(Price)) %>%
+  count(Price_Rank, Price, Country)
+```
+
+We can then use the structure from the second case to calculate, for example, the total number of items every rank contains.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank) %>%
+  summarise(Total_Quantity_per_Rank = sum(Quantity)) %>%
+  arrange(Price_Rank)
+```
+
+This calculation would have returned a different result if we didn't "nest" the groups because, as we've seen before, for example Australia doesn't have a value in the `Price_Rank` column that is lower than 30.
+
+```{r}
+df %>%
+  group_by(Price_Rank = dense_rank(Price)) %>%
+  summarise(Total_Quantity_per_Rank = sum(Quantity)) %>%
+  arrange(Price_Rank)
+```
+
+If we add the `Country` grouping again we can also show the top 3 countries by number of items per rank.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank, Country) %>%
+  summarise(Total_Quantity_per_Rank = sum(Quantity)) %>%
+  arrange(Price_Rank, desc(Total_Quantity_per_Rank)) %>%
+  slice(1:3)
+```
+
+## - *.add = TRUE*
+
+Using `.add = TRUE` outputs a different number of groups which is the same for both cases.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  group_by(Price_Rank = dense_rank(Price), .add = TRUE) %>%
+  n_groups()
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank, .add = TRUE) %>%
+  n_groups()
+```
+
+This happens because here we group by two columns at the same time, so, compared to before, the larger number of groups is determined by all the unique existing combinations between them.
+
+Notice how it is the same as the number of rows for the tables returned by `count(Price_Rank, Price, Country)` in the previous section: that is because `count()` returns in fact as many rows as all the unique existing combinations between the values of the columns we feed into it.
+
+The rankings are the same to the default `.add = FALSE` as in the first case we still rank the prices on an ungrouped data frame,
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  group_by(Price_Rank = dense_rank(Price), .add = TRUE)
+df %>%
+  group_by(Country) %>%
+  group_by(Price_Rank = dense_rank(Price), .add = TRUE) %>%
+  ungroup() %>%
+  count(Country, Price, Price_Rank)
+```
+
+while in the second case on a grouped one.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank, .add = TRUE)
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank, .add = TRUE) %>%
+  ungroup() %>%
+  count(Country, Price, Price_Rank)
+```
+
+The first `.add = TRUE` case, the implicit one, is equivalent to using two grouping columns in the same `group_by()` call,
+
+```{r, df_print = "paged"}
+identical(df %>%
+            group_by(Country) %>%
+            group_by(Price_Rank = dense_rank(Price), .add = TRUE),
+          df %>%
+            group_by(Country, Price_Rank = dense_rank(Price)))
+```
+
+also if we render explicit the `mutate()` call.
+
+```{r, df_print = "paged"}
+identical(df %>%
+            group_by(Country) %>%
+            group_by(Price_Rank = dense_rank(Price), .add = TRUE),
+          df %>%
+            mutate(Price_Rank = dense_rank(Price)) %>%
+            group_by(Country, Price_Rank))
+```
+
+We can use `.add = TRUE` to obtain the same results of an example from the previous section, but here we need to add a supplementary `group_by(Price_Rank)` as the first one is "peeled off" by the `summarise()` call.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank, .add = TRUE) %>%
+  summarise(Total_Quantity_per_Rank = sum(Quantity)) %>%
+  arrange(Price_Rank, desc(Total_Quantity_per_Rank)) %>%
+  group_by(Price_Rank) %>%
+  slice(1:3)
+```
+
+
+# - *.drop*
+
+It can happen that we group by a factor that, after a manipulation, doesn't have anymore values in a level, like Lebanon here that only has 13 rows.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(factor(Country)) %>%
+  filter(row_number() == 15) %>%
+  n_groups()
+```
+
+By default the Lebanon group gets removed, as it is now empty, so the number of groups has decreased.
+
+If we wish to keep the empty groups for further manipulations, we can do so by changing the value of the `.drop` argument to FALSE from its default TRUE.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(factor(Country), .drop = FALSE) %>%
+  filter(row_number() == 15) %>%
+  n_groups()
+```
+
+We need to pay attention when we group by more than one factor though, as `.drop = FALSE` will accordingly return every combination between their levels, even the non existing ones, as we see here where it is like every customer is located in every country.
+
+```{r}
+df %>%
+  group_by(factor(Country), factor(`Customer ID`), .drop = FALSE) %>%
+  summarise(Total_Quantity = sum(Quantity))
+```
+
+The default (`.drop = TRUE`) doesn't return the non existing combinations.
+
+```{r}
+df %>%
+  group_by(factor(Country), factor(`Customer ID`)) %>%
+  summarise(Total_Quantity = sum(Quantity))
+```
+
+If we are not using factors the `.drop` argument doesn't change the output, as it is factor specific.
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`, .drop = FALSE) %>%
+  summarise(Total_Quantity = sum(Quantity))
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  summarise(Total_Quantity = sum(Quantity))
+```
+
+If we mix factor and another type the output depends on the order, because if we use factors as the second grouping column we get empty combinations, so attention is required.
+
+```{r}
+df %>%
+  group_by(factor(Country), `Customer ID`, .drop = FALSE) %>%
+  summarise(Total_Quantity = sum(Quantity))
+df %>%
+  group_by(Country, factor(`Customer ID`), .drop = FALSE) %>%
+  summarise(Total_Quantity = sum(Quantity))
+```
+
+`.drop` is similar to the `.preserve` argument of `filter()` and `slice()`, except that `.preserve` works with any kind of classes, not only with factors like `.drop`.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country) %>%
+  filter(row_number() == 15) %>%
+  n_groups()
+df %>%
+  group_by(Country) %>%
+  filter(row_number() == 15, .preserve = TRUE) %>%
+  n_groups()
+```
+
+In case we apply `group_by()` to a grouped data frame that had `.drop = FALSE`, the default changes to (keeps being) FALSE, so we will continue to keep the empty levels going forward, even if the second `group_by()` is not applied to factors.
+
+```{r}
+df %>%
+  group_by(factor(Country), .drop = FALSE) %>%
+  filter(row_number() > 15) %>%
+  group_by(`Customer ID`) %>%
+  filter(row_number() > 50) %>%
+  summarise(n = n())
+```
+
+And we need to specify `.drop = TRUE` if we want to return to the default behavior.
+
+```{r}
+df %>%
+  group_by(factor(Country), .drop = FALSE) %>%
+  filter(row_number() > 15) %>%
+  group_by(`Customer ID`, .drop = TRUE) %>%
+  filter(row_number() > 50) %>%
+  summarise(n = n())
+```
+
+## - *group_by_drop_default()*
+
+In case of doubt the state of `.drop` can be checked with `group_by_drop_default()`.
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(factor(Country), .drop = FALSE) %>%
+  filter(row_number() > 15) %>%
+  group_by(`Customer ID`) %>%
+  group_by_drop_default()
+```
+
+# - *using .by or by instead*
+
+tidy-select
+
+We can perform operations on grouped data frames also by using the `.by` argument, available for the following verbs.
+
+```{r, eval = FALSE, df_print = "paged"}
+mutate()
+summarise()
+reframe()
+filter()
+slice()
+```
+
+`slice()` helpers use `by` instead.
+
+```{r, eval = FALSE, df_print = "paged"}
+slice_head()
+slice_tail()
+slice_min()
+slice_max()
+slice_sample()
+```
+
+So if we want to translate the following lines of code,
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Avg_Price = mean(Price))
+```
+
+we can write
+
+```{r}
+df %>%
+  mutate(Avg_Price = mean(Price), .by = Country)
+```
+
+The first difference between the two is that `.by` doesn't return a grouped data frame so with it we can avoid subsequent `ungroup()` calls.
+
+Then if we group by two columns we must use a tidy-select syntax to specify them.
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  mutate(Avg_Price = mean(Price))
+df %>%
+  mutate(Avg_Price = mean(Price), .by = c(Country, `Customer ID` ))
+```
+
+The tidy-select syntax permits different kinds of selection without the need of using `across()`.
+
+```{r}
+df %>%
+  mutate(Avg_Price = mean(Price), .by = starts_with("C"))
+df %>%
+  group_by(across(starts_with("C"))) %>%
+  mutate(Avg_Price = mean(Price))
+```
+
+`.by` has no problems with multiple manipulations in the same `mutate()` call.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Grouped_Avg = mean(Price),
+         Grouped_Filter = Price > Grouped_Avg,
+         Ungrouped_Avg = mean(df$Price),
+         Ungrouped_Filter = Price > Ungrouped_Avg, .keep = "used")
+df %>%
+  mutate(Grouped_Avg = mean(Price),
+         Grouped_Filter = Price > Grouped_Avg,
+         Ungrouped_Avg = mean(df$Price),
+         Ungrouped_Filter = Price > Ungrouped_Avg, .keep = "used", .by = Country)
+```
+
+And can shorten some examples we've previously discussed (notice as well how in the first reworked example the `select()` call is different, as `.by` ungroups by default).
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Country_Avg_Price = mean(Price)) %>%
+  group_by(`Customer ID`, .add = TRUE) %>%
+  mutate(Country_Customer_Avg_Price = mean(Price)) %>%
+  select(Country_Avg_Price, Country_Customer_Avg_Price)
+df %>%
+  mutate(Country_Avg_Price = mean(Price), .by = Country) %>%
+  mutate(Country_Customer_Avg_Price = mean(Price), .by = c(Country, `Customer ID` )) %>%
+  select(Country, `Customer ID`, Country_Avg_Price, Country_Customer_Avg_Price)
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  group_by(Price_Rank) %>%
+  summarise(Total_Quantity_per_Rank = sum(Quantity)) %>%
+  arrange(Price_Rank, desc(Total_Quantity_per_Rank))
+df %>%
+  mutate(Price_Rank = dense_rank(Price), .by = Country) %>%
+  summarise(Total_Quantity_per_Rank = sum(Quantity), .by = Price_Rank) %>%
+  arrange(Price_Rank, desc(Total_Quantity_per_Rank))
+```
+
+But in case we need the same grouping for many subsequent manipulations we might prefer `group_by()`, with the goal to avoid repetitions.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(Price)) %>%
+  filter(Price_Rank == 2) %>%
+  slice(1)
+df %>%
+  mutate(Price_Rank = dense_rank(Price), .by = Country) %>%
+  filter(Price_Rank == 2, .by = Country) %>%
+  slice(1, .by = Country)
+```
+
+Or if we are taking advantage of automatically removing the last grouping with a `summarise()` call.
+
+```{r}
+df %>%
+  group_by(`Customer ID`, Invoice) %>%
+  summarise(N_Rows_per_Invoice = n()) %>%
+  mutate(N_Invoice_Rows_per_Customer = sum(N_Rows_per_Invoice))
+df %>%
+  summarise(N_Rows_per_Invoice = n(), .by = c(`Customer ID` , Invoice)) %>%
+  mutate(N_Invoice_Rows_per_Customer = sum(N_Rows_per_Invoice), .by = `Customer ID`)
+```
+
+Another thing evident from this example is that `.by` maintains the original row order when used with `summarise()` while with `group_by()` that verb rearranges by the grouping variables.
+
+This behavior is shared with `slice()`
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  slice(1)
+df %>%
+  slice(1, .by = Country)
+```
+
+and with `reframe()` as well.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  reframe(Price_Quantile_Value = quantile(Price, c(0.25, 0.75)), prob = c(0.25, 0.75))
+df %>%
+  reframe(Price_Quantile_Value = quantile(Price, c(0.25, 0.75)), prob = c(0.25, 0.75), .by = StockCode)
+```
+
+Additionally, `.by` can't replicate the `.drop = FALSE` use case but only the default `drop = TRUE`.
+
+```{r}
+df %>%
+  group_by(factor(Country), factor(`Customer ID`), .drop = FALSE) %>%
+  summarise(Total_Quantity = sum(Quantity))
+df %>%
+  mutate(Country = factor(Country),
+         `Customer ID` = factor(`Customer ID`)) %>%
+  summarise(Total_Quantity = sum(Quantity), .by = c(Country, `Customer ID` ))
+```
+
+In this last example we can also reinforce how `.by` uses a tidy-select syntax, so we had to use a `mutate()` call beforehand to have factor columns.
+
+If we try to use `.by` on a grouped data frame, we receive an error.
+
+```{r, error = TRUE}
+df %>%
+  group_by(Country) %>%
+  mutate(Avg_Price = mean(Price), .by = `Customer ID`)
+```

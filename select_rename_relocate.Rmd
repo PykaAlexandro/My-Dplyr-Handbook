@@ -1,0 +1,622 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+# - *select()*
+
+tidy-select
+
+`select()` preserves the columns specified as its arguments, removing the other ones.
+
+```{r}
+df %>%
+  select(Invoice)
+df %>%
+  select(Invoice, InvoiceDate)
+```
+
+If we specify a column that doesn't exist, the function will throw an error.
+
+```{r, error = TRUE}
+df %>%
+  select(Invoice, Shipment)
+```
+
+The columns can be specified either by their names (quoted or unquoted)
+
+```{r}
+df %>%
+  select("Invoice", InvoiceDate, `Customer ID`)
+```
+
+or by their positions (which means their column number).
+
+```{r}
+df %>%
+  select(1, 5, 7)
+```
+
+The order by which we specify them will reflect on the output.
+
+```{r}
+df %>%
+  select(InvoiceDate, Invoice, `Customer ID`)
+```
+
+The minus (`-`) and NOT (`!`) operators remove the columns specified.
+
+```{r}
+df %>%
+  select(-Description)
+df %>%
+  select(!Description)
+```
+
+NOT doesn't work if applied to more than one column. 
+
+```{r}
+df %>%
+  select(-Invoice, -StockCode)
+df %>%
+  select(!Invoice, !StockCode)
+```
+
+Unless we use it on a vector.
+
+```{r}
+df %>%
+  select(!c(Invoice, StockCode))
+```
+
+By using a colon (`:`) we can preserve and remove consecutive columns.
+
+```{r}
+df %>%
+  select(Invoice:Description)
+df %>%
+  select(1:3)
+df %>%
+  select(-(Invoice:Description))
+df %>%
+  select(!(Invoice:Description))
+df %>%
+  select(-(1:3))
+df %>%
+  select(!(1:3))
+```
+
+There are many helpers we can take advantage of;
+
+## - *string matching helpers*
+
+like the ones that do string matching on the columns' names,
+
+```{r}
+df %>%
+  select(starts_with("I"))
+df %>%
+  select(ends_with("E"))
+df %>%
+  select(contains("voice"))
+```
+
+all of them not case sensitive by default (but that can be changed by setting the optional argument `ignore.case` to FALSE).
+
+```{r}
+df %>%
+  select(contains("Voice", ignore.case = FALSE))
+```
+
+Another optional argument is `vars`, by which we can supply different columns to select from than the ones in the data frame.
+
+```{r}
+df %>%
+  select(contains("Voice", vars = c("Invoice", "StockCode")))
+```
+
+We also have `matches()`, that employs regex logic instead, and has a further optional argument, `perl`, to use Perl-compatible regexps.
+
+```{r}
+df %>%
+  select(matches("Voice"))
+```
+
+If our condition doesn't return any column, the output will be a data frame with no columns.
+
+```{r}
+df %>%
+  select(starts_with("Z"))
+```
+
+## - *any_of()` & `all_of()*
+
+`any_of()` and `all_of()` must be used when we have columns' names stored in an external vector.
+
+```{r}
+cols_vec <- c("Invoice", "InvoiceDate")
+df %>%
+  select(any_of(cols_vec))
+df %>%
+  select(all_of(cols_vec))
+```
+
+As without them `select()` will throw a warning.
+
+```{r}
+df %>%
+  select(cols_vec)
+```
+
+Their difference comes off when a column from the vector is not present in the data frame, as `all_of()`throws an error.
+
+```{r, error = TRUE}
+cols_vec <- c("Invoice", "InvoiceDate", "Shipment")
+df %>%
+  select(all_of(cols_vec))
+```
+
+Where `any_of()` returns just the columns of the data frame that match the ones in the vector.
+
+```{r}
+df %>%
+  select(any_of(cols_vec))
+```
+
+The same behavior is present in case of de-selections.
+
+```{r, error = TRUE}
+df %>%
+  select(-all_of(cols_vec))
+df %>%
+  select(-any_of(cols_vec))
+```
+
+## - *num_range()*
+
+`num_range()` can be useful in case we have columns that differ only for a number, like for instance `Description1`, `Description2`, ... , to produce more concise code.
+
+```{r}
+df %>%
+  select(num_range("Description", 3:5))
+```
+
+As before, when there are no columns matching the condition, `select()` returns 0 rows instead of an error.
+
+`num_range()` has the optional arguments `width`, with which we can account for a serie of 0s before the actual number (like if the columns were named `Description001`, `Description002`, ... , we would use a `width` of 3) and `vars`.   
+Furthermore, we can specify `suffix =` if the columns were named `1Description`, `2Description`, ... ,
+
+## - *last_col()*
+
+`last_col()` lets us easily select the last
+
+```{r}
+df %>%
+  select(last_col())
+```
+
+or the nth column from the end.
+
+```{r}
+df %>%
+  select(last_col(5))
+```
+
+## - *where()*
+
+Using `where()`, `select()` preserves the columns that evaluate to TRUE to the condition expressed within.
+
+```{r}
+df %>%
+  select(where(is.numeric))
+df %>%
+  select(where(is.character))
+```
+
+We can rewrite those expressions in different ways; with an anonymous function,
+
+```{r}
+df %>% 
+  select(where(function(x) is.numeric(x)))
+```
+
+or with a formula.
+
+```{r}
+df %>% 
+  select(where(~ is.numeric(.x)))
+```
+
+Using a formula we can easily add multiple conditions,
+
+```{r}
+df %>%
+  select(where(~ is.numeric(.x) & median(.x, na.rm = TRUE) < 50))
+```
+
+or more particular expressions, like selecting the columns that have at least one 12.
+
+```{r}
+df %>%
+  select(where(~ any(.x == 12, na.rm = TRUE)))
+```
+
+Or where all the values are either "Italy" or "France".
+
+```{r}
+df %>%
+  mutate(Country = Country,
+         IT_Country = rep("Italy"),
+         FR_Country = rep("France"),
+         UK_Country = rep("United Kingdom"), .keep = "used")
+df %>%
+  mutate(Country = Country,
+         IT_Country = rep("Italy"),
+         FR_Country = rep("France"),
+         UK_Country = rep("United Kingdom"), .keep = "used") %>%
+  select(where(~ all(.x %in% c("Italy", "France"))))
+```
+
+We can use this syntax to preserve/remove columns with/without  NAs.
+
+```{r}
+df %>%
+  select(where(~ any(is.na(.x))))
+df %>%
+  select(where(~ !any(is.na(.x))))
+```
+
+In case there were columns with only NAs,
+
+```{r}
+df %>%
+  mutate(NA_column_1 = NA,
+         NA_column_2 = NA, .before = "Invoice")
+```
+
+We can use `all()` to either preserve or remove them.
+
+```{r}
+df %>%
+  mutate(NA_column = NA,
+         NA_column_2 = NA) %>%
+  select(where(~ all(is.na(.x))))
+df %>%
+  mutate(NA_column = NA,
+         NA_column_2 = NA) %>%
+  select(where(~ !all(is.na(.x))))
+```
+
+## - *with & (AND) & | (OR)*
+
+We can chain more selections using the logical operators AND (`&`) and OR (`|`).
+
+`&` returns the columns present in all selections' statements.
+
+```{r}
+df %>%
+  select(c("Invoice", "Country") & last_col())
+```
+
+While `|` the ones present in any one of them.
+
+```{r}
+df %>%
+  select(c("Invoice", "Country") | last_col())
+```
+
+Attention that, differently from `filter()`, here the comma is not synonymous with `&` but with `|`.
+
+```{r}
+df %>%
+  select(c("Invoice", "Country"), last_col())
+```
+
+So for clarity's sake it is better to favor `|` to it.
+
+```{r}
+df %>%
+  select(contains(c("A", "d")))
+df %>%
+  select(contains("A") | contains("d"))
+df %>%
+  select(contains("A") & contains("d"))
+```
+
+# - *rename()*
+
+tidy-select
+
+We can use `select()` also to rename columns, with the syntax `new_name = old_name`.
+
+```{r}
+df %>%
+  select(CustomerID = `Customer ID`)
+```
+
+It will generally drop all unspecified columns though, except in the very specific case where we remove the old column before giving its name to another one.
+
+```{r}
+df %>%
+  select(-Invoice, Invoice = StockCode)
+df %>%
+  select(!Invoice, Invoice = StockCode)
+```
+
+So it is better to use `rename()`, which preserves the unspecified ones.
+
+```{r}
+df %>%
+  rename(CustomerID = `Customer ID`)
+```
+
+## - *any_of() & all_of()*
+
+`any_of()` and `all_of()` can be used as well, when we have a vector with the modifications.
+
+```{r}
+any_new_names <- c(CUSTOMER_ID = "Customer ID", COUNTRY = "Country", SHIPMENT = "Shipment")
+df %>%
+  rename(any_of(any_new_names))
+all_new_names <- c(CUSTOMER_ID = "Customer ID", COUNTRY = "Country")
+df %>%
+  rename(all_of(all_new_names))
+```
+
+By the same token as with `select()`, all of the columns to be modified must be present in the data frame when we use `all_of()`.
+
+```{r, error = TRUE}
+df %>%
+  rename(all_of(any_new_names))
+```
+
+## - *rename_with()*
+
+In case we want to use a function, one that changes the case for example, we can with its variant `rename_with()`, which first requires the function and then the columns we want to apply that function to.
+
+```{r}
+df %>%
+  rename_with(stringr::str_to_lower, starts_with("I"))
+```
+
+The default is `everything()`, i.e. all of the columns.
+
+```{r}
+df %>%
+  rename_with(stringr::str_to_lower)
+```
+
+## - *everything()*
+
+`everything()` is in fact a helper that selects all of the columns, allowing to type less.
+
+It can be useful if we want to move some columns to the first positions in a concise way, as it permits to not having to write the columns' name that we do not want to move.
+
+```{r}
+df %>%
+  select(`Customer ID`, Country, everything())
+```
+
+It doesn't work though if we want to move columns at the end
+
+```{r}
+df %>%
+  select(everything(), Invoice, `Customer ID`)
+```
+
+or if we use it between two columns. 
+
+```{r}
+df %>%
+  select(Invoice, everything(), `Customer ID`)
+```
+
+Plus I don't understand the functioning of its `vars` argument.
+
+```{r}
+df %>%
+  select(everything(vars = c("Description", "InvoiceDate")))
+df %>%
+  select(Invoice, everything(vars = c("Description", "InvoiceDate")), `Customer ID`)
+```
+
+# - *relocate()*
+
+tidy-select
+
+So, to move groups of columns, `relocate()` comes handy. 
+
+```{r}
+df %>%
+  relocate(`Customer ID`, Country)
+```
+
+The default behavior is to move the columns specified at the front, but we can use its `.after` and `.before` optional tidy-select arguments to change that.
+
+```{r}
+df %>%
+  relocate(Invoice, `Customer ID`, .after = Country)
+```
+
+`relocate()` employs many behaviors of `select()` and `rename()`.
+
+```{r}
+df %>% 
+  relocate(where(is.numeric), .after = last_col())
+df %>% 
+  relocate(any_of(cols_vec))
+df %>%
+  relocate(CustomerID = `Customer ID`)
+```
+
+The optional arguments can utilize `where()` as well.
+
+```{r}
+df %>% 
+  relocate(where(is.numeric), .after = where(is.character))
+```
+
+# - *with group_by()*
+
+In case of grouped data frames the grouping columns are always added to the selection.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  select(Invoice, Quantity)
+```
+
+And can't be de-selected even manually.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  select(Invoice, Quantity, -Country)
+```
+
+The order of the selection of the previous example is important because, if we put `-Country` first, it will maintain all the columns.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  select(-Country, Invoice, Quantity)
+```
+
+Like if we put it last with a NOT (`!`).
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  select(Invoice, Quantity, !Country)
+```
+
+The only way to remove the grouping columns from the selection is to `ungroup()`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  ungroup() %>%
+  select(Invoice, Quantity)
+```
+
+## - *group_cols()*
+
+We can use `group_cols()` if we want to change the position of the grouping columns in the output, especially when we have several of them.
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  select(Invoice, Quantity)
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  select(Invoice, Quantity, group_cols())
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  select(Invoice, group_cols(), Quantity)
+```
+
+Using it will also remove the message.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  select(group_cols())
+df %>%
+  group_by(Country) %>%
+  select()
+```
+
+It doesn't work though for removing the grouping columns from the selection.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  select(Invoice, Quantity, -group_cols())
+```
+
+And if put first it will invalidate the `select()` call, like we have seen before.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  select(-group_cols(), Invoice, Quantity)
+```
+
+`rename()` and `relocate()` don't change their behavior with a grouped data frame,
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  rename(CustomerID = `Customer ID`)
+df %>%
+  group_by(Country) %>%
+  relocate(`Customer ID`, Country)
+```
+
+`rename()` though updates the name of the grouping columns when used on them.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  rename(COUNTRY = Country)
+```

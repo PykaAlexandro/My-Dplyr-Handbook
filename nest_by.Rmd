@@ -1,0 +1,266 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged_rowwise")
+```
+
+```{r, echo=FALSE}
+is_rowwise_df <- function(x) {
+  inherits(x, "rowwise_df")
+}
+info_paged_rowwise_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  rowwise_info <- paste0("<div class=\"group-info\">Rowwise: ", 
+                      paste0(group_vars(x), collapse = ", "), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (is_rowwise_df(x)) { 
+    tab_info_rowwise <- paste0("<div class=\"info\">", tibble_info, " ", rowwise_info, "</div>")
+    cat(tab_info_rowwise)
+  } else if (dplyr::is_grouped_df(x)){
+    tab_info_grouped <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info_grouped)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))    
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged_rowwise") {
+    options$render = info_paged_rowwise_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+# - *fundamentals*
+
+`nest_by()` shares some similarities with `group_by()`, as both group multiple rows of a data frame by the unique values of the columns specified as arguments.
+
+```{r}
+df %>%
+  group_by(Country)
+```
+
+The difference is in the output as `nest_by()` creates a list-column called data, where every element of it is a data frame containing the rows pertaining to a unique value of the nesting column
+
+```{r}
+df %>%
+  nest_by(Country)
+```
+
+or to every existing combination of them in case we specify more than one.
+
+```{r}
+df %>%
+  nest_by(Country, `Customer ID`)
+```
+
+Notice how the rows are ordered by the nesting columns.
+
+It is therefore similar to `group_nest()`,
+
+```{r}
+df %>%
+  group_nest(Country)
+```
+
+besides the fact that `nest_by()` returns a rowwise data frame, so we can subsequently apply the same manipulations to each data frame independently.
+
+```{r}
+df %>%
+  nest_by(Country) %>%
+  reframe(Values = dim(data)) %>%
+  bind_cols(tibble(Dimension = rep(c("Rows", "Columns"), 40)))
+```
+
+If we want to go back to the original data, we can use `unnest()` from `tidyr`.
+
+```{r}
+df %>%
+  nest_by(Country) %>%
+  tidyr:::unnest(cols = c(data))
+```
+
+The order of the columns has changed though (the nesting column has been moved to the front), the rows' order is the one of the nesting column plus we obtained a grouped data frame.
+
+In case we want to change the nesting column, we have to apply `unnest()`, `ungroup()` and then `nest_by()` again.
+
+```{r}
+df %>%
+  nest_by(Country) %>%
+  tidyr:::unnest(cols = c(data)) %>%
+  ungroup() %>%
+  nest_by(`Customer ID`)
+```
+
+As it is not possible to override it as we can with `group_by()`.
+
+```{r, error = TRUE}
+df %>%
+  group_by(Country) %>%
+  group_by(`Customer ID`)
+df %>%
+  nest_by(Country) %>%
+  nest_by(`Customer ID`)
+```
+
+Unless it is by the same columns, but that is redundant.
+
+```{r}
+df %>%
+  nest_by(Country) %>%
+  nest_by(Country)
+df %>%
+  nest_by(Country, `Customer ID`) %>%
+  nest_by(Country, `Customer ID`)
+```
+
+To unnest we can also use `reframe()`, which ungroups the output as well.
+
+```{r}
+df %>%
+  nest_by(Country) %>%
+  reframe(data)
+```
+
+We can access every data frame like this,
+
+```{r}
+df %>%
+  nest_by(Country) %>%
+  ungroup() %>%
+  select(data) %>%
+  slice(1) %>%
+  tidyr::unnest(cols = c(data))
+```
+
+also without selecting data if we want to show the nesting column as well.
+
+```{r}
+df %>%
+  nest_by(Country) %>%
+  ungroup() %>%
+  slice(1) %>%
+  tidyr::unnest(cols = c(data))
+```
+
+Without ungrouping we would not get the desired output but we would unnest the whole data frame.
+
+```{r}
+df %>%
+  nest_by(Country) %>%
+  select(data) %>%
+  slice(1) %>%
+  tidyr::unnest(cols = c(data))
+```
+
+Like `group_by()`, we can use `nest_by()` with expressions (the documentation states that "Computations are not allowed in `nest_by()`" though).
+
+```{r}
+df %>%
+  nest_by(CustomerID = as.character(`Customer ID`))
+df %>%
+  nest_by(Price_Rank = dense_rank(Price))
+```
+
+Which are equivalent to performing a `mutate()` call beforehand.
+
+```{r}
+df %>%
+  mutate(CustomerID = as.character(`Customer ID`)) %>%
+  nest_by(CustomerID)
+df %>%
+  mutate(Price_Rank = min_rank(Price)) %>%
+  nest_by(Price_Rank)
+```
+
+# - *.key*
+
+We can change the name of the list-column with the `.key` argument
+
+```{r}
+df %>%
+  nest_by(Country, .key = "list of dfs")
+```
+
+# - *.keep*
+
+With the `.keep` argument instead we control whether or not to keep the nesting column in the data frames.
+
+```{r}
+df %>%
+  nest_by(Country , .keep = TRUE) %>%
+  ungroup() %>%
+  select(data) %>%
+  slice(1) %>%
+  tidyr::unnest(cols = c(data))
+```
+
+Ultimately, `nest_by()` is equivalent to these lines of code.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(data = list(pick(everything()))) %>%
+  rowwise()
+```
+
+# - *with group_by()*
+
+On a grouped data frame, `nest_by()` only works without an argument, as it inherits the grouping column from `group_by()`.
+
+```{r, error = TRUE}
+df %>%
+  group_by(Country) %>%
+  nest_by()
+df %>%
+  group_by(Country) %>%
+  nest_by(`Customer ID`)
+```
+
+Also if we specify the same column.
+
+```{r, error = TRUE}
+df %>%
+  group_by(Country) %>%
+  nest_by(Country)
+```

@@ -1,0 +1,192 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+data-masking
+
+# - *fundamentals*
+
+`arrange()` reorders the rows of a data frame by the values of one or several columns. 
+
+In case of numerical ones, the default puts the smallest values first.
+
+```{r}
+df %>%
+  arrange(Quantity)
+```
+
+We need to use a minus (`-`) or to wrap the column in `desc()` if we are interested in seeing the largest ones on top.
+
+```{r}
+df %>%
+  arrange(-Quantity)
+df %>%
+  arrange(desc(Quantity))
+```
+
+The documentation doesn't specify what happens in case of ties but we can assume that rows with a smaller row index come first, preserving their original row order then.
+
+In case of character columns, the order is alphabetical as defined by the default "C" locale.
+
+```{r}
+df %>%
+  arrange(Description)
+df %>%
+  arrange(desc(Description))
+```
+
+# - *.locale*
+
+We can change it to the locale of our choice with the `.locale` argument.
+
+```{r}
+df %>%
+  arrange(Description, .locale = "en")
+```
+
+In case we want to arrange character columns by a custom order, it is possible by transforming them in ordered factors.
+
+```{r}
+df %>%
+  mutate(Description_Factor = factor(Description, levels = sample(unique(df$Description), 
+                                                                  length(unique(df$Description))), ordered = TRUE)) %>%
+  arrange(Description_Factor)
+```
+
+`arrange()` is a data-masking function, so it accepts expressions as input.
+
+```{r}
+df %>%
+  arrange(Quantity ^ 2)
+df %>%
+  arrange(min_rank(Quantity))
+```
+
+NAs are placed at the bottom, but we can have them on top by using this syntax (that exploits the data-masking nature of `arrange()` putting the FALSEs, that are equal to 0, first).
+
+```{r}
+df %>%
+  arrange(!is.na(Description))
+```
+
+If we use more columns, the subsequent ones will be used to resolve ties (notice how rows 2 and 3 swap place in the second line of code).
+
+```{r}
+df %>%
+  arrange(desc(Quantity))
+df %>%
+  arrange(desc(Quantity), StockCode)
+```
+
+# - *with group_by()*
+
+`arrange()` ignores grouping. In this way we can have rows from different groups at the top.
+
+```{r}
+df %>%
+  group_by(Description) %>%
+  arrange(Quantity)
+```
+
+In case we want to order by the grouping column as well, we need to add it, before or after the other columns as the situation requires.
+
+```{r}
+df %>%
+  group_by(Description) %>%
+  arrange(Quantity, Description)
+df %>%
+  group_by(Description) %>%
+  arrange(Description, Quantity)
+```
+
+## - *.by_group*
+
+Instead of specifying the grouping column, we can set the `.by_group` argument to TRUE.
+This will use the grouping column as the first one specified, like in the previous example.
+
+```{r}
+df %>%
+  group_by(Description) %>% 
+  arrange(Quantity, .by_group = TRUE)
+```
+
+## - *using expressions*
+
+If we use an expression within `arrange()`, that will be evaluated on all the data frame and non per groups.  
+Therefore in the following example the verb doesn't modify the rows' order as `sum(Quantity)` returns the same value for all the rows.
+
+```{r}
+df %>%
+  group_by(Description) %>%
+  arrange(desc(sum(Quantity)))
+```
+
+So we need to be explicit with a `mutate()` call and use the resulting additional column to arrange by.
+
+```{r}
+df %>%
+  group_by(Description) %>%
+  mutate(Total_Quantity = sum(Quantity)) %>%
+  arrange(desc(Total_Quantity))
+```

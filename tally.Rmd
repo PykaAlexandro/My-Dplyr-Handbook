@@ -1,0 +1,281 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr) #OPPURE USO include?
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx")) 
+```
+
+# - *fundamentals*
+
+`tally()` is a wrapper for `summarise(n = n())` and as such it returns the number of rows of a data frame.
+
+```{r}
+df %>%
+  tally()
+df %>% 
+  summarise(n = n())
+```
+
+`tally()`, like `n()`, doesn't need an argument and if supplied with an unnamed one it uses it as the value for `wt`, so attention is required.
+
+```{r}
+df %>%
+  tally(Quantity)
+df %>%
+  tally(wt = Quantity)
+```
+
+# - *wt*
+
+data-masking
+
+Speaking about `wt`, it modifies the function inside `summarise()` from `n()` to `sum(wt)`,
+
+```{r}
+df %>%
+  tally(wt = Quantity)
+df %>% 
+  summarise(n = sum(Quantity))
+```
+
+Therefore outputting not the number of rows but the summation of the values of the column specified in it.
+
+We can't obviously use `wt` with columns whose values can't be summed.
+
+```{r, error = TRUE}
+df %>%
+  tally(wt = Description)
+```
+
+It can be used though with more than one column.
+
+```{r}
+df %>%
+  tally(wt = c(Quantity, Price))
+```
+
+In these instances it is equivalent to
+
+```{r}
+df %>% 
+  summarise(n = sum(Quantity, Price))
+```
+
+`wt` accepts expressions as well, 
+
+```{r}
+df %>%
+  tally(wt = Quantity / 2)
+```
+
+as long as their output can be summed of course.
+
+```{r, error = TRUE}
+df %>%
+  tally(wt = as.character(Quantity / 2))
+```
+
+There are some functions where the summation is inconsequential,
+
+```{r}
+df %>%
+  tally(wt = n_distinct(`Customer ID`))
+```
+
+as they return just one addend.
+
+```{r}
+df %>%
+  summarise(n = sum(n_distinct(`Customer ID`)))
+df %>%
+  summarise(n = n_distinct(`Customer ID`))
+```
+
+so using `wt` gives us the possibility to employ them in a `tally(`) call, if we wish to do so.
+
+If we have an already aggregated data frame,
+
+```{r}
+df %>%
+  count(Country)
+```
+
+we can use `wt` to retrieve the original total number of rows.
+
+```{r}
+df %>%
+  count(Country) %>%
+  tally(wt = n)
+```
+
+# - *name*
+
+Another optional argument is `name`, to change `n` to a custom denomination.
+
+```{r}
+df %>%
+  tally(name = "Total_Number_of_Rows")
+```
+
+# - *with group_by()*
+
+When used on a grouped data frame, `tally()` returns the number of rows for each group thus becoming equivalent to a `count()` call,
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  tally()
+df %>%
+  count(Country)
+```
+
+except from the fact that `tally()`, like `summarise()`, removes the most recent grouping when we have a data frame grouped by more than one column,
+
+```{r, df_print = "paged"}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  tally() %>%
+  group_vars()
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  summarise(n = n()) %>%
+  group_vars()
+```
+
+while `count()` removes all the groups.
+
+```{r, df_print = "paged"}
+df %>%
+  count(Country, `Customer ID`) %>%
+  group_vars()
+```
+
+## - *sort*
+
+With a grouped data frame, we can use the `sort` argument to arrange the rows by `n`, in descending order.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  tally(sort = TRUE)
+```
+
+Using `sort  = TRUE` we can see as well that NAs are counted as one value, as per `n()` functionality.
+
+```{r}
+df %>%
+  group_by(`Customer ID`) %>%
+  tally(sort = TRUE)
+```
+
+# - *add_tally()*
+
+`tally()`'s variant, `add_tally()`, uses `mutate()` instead of `summarise()` therefore adding a column named `n` with the same value for all of the rows.
+
+```{r}
+df %>%
+  add_tally()
+df %>%
+  mutate(n = n())
+```
+
+`add_tally()` is consistent with the arguments of `tally()`.
+
+```{r}
+df %>%
+  tally(wt = Quantity, name = "Total_Quantity")
+```
+
+## - *with group_by()*
+
+On a grouped data frame all the rows pertaining to the same group will share the same value.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  add_tally()
+```
+
+Differently from `tally()`, `add_tally()` doesn't ungroup the output, even with several column, 
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  add_tally()
+```
+
+as that is not a property of `mutate()`.
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  mutate(n = n())
+```
+
+## - *sort*
+
+With a grouped data frame we can use the `sort` argument, that will arrange the rows by the descending order of `n`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  add_tally(sort = TRUE)
+```

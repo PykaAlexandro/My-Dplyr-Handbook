@@ -1,0 +1,372 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+# - *cumsum(), cummean(), cummax(), cummin() & cumprod()* 
+
+This family of functions, offering variations on the base `R` aggregate functions `sum()`, `mean()`, `max()`, `min()` and `prod()`, consists of 
+
+```{r, eval = FALSE, df_print = "paged"}
+cumsum()
+cummean()
+cummax()
+cummin()
+cumprod()
+```
+
+`cummean()` is a `dplyr` function while the others can be found in base `R`.
+
+The variation consists in the fact that, while the original functions output a scalar with just the final result of their calculation, their cumulative versions return a vector with as many elements as the input showing step by step how they reach the final result.
+
+Starting with the variation of `sum()` we have `cumsum()`:
+
+```{r, df_print = "paged"}
+(x <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+sum(x)
+cumsum(x)
+```
+
+Then we have `cummean()`, `cummax()`, `cummin()` and `cumprod()` that all behave like expected:
+
+```{r, df_print = "paged"}
+mean(x)
+cummean(x)
+max(x)
+cummax(x)
+min(x)
+cummin(x)
+prod(x)
+cumprod(x)
+```
+
+The presence of NAs could be a problem as these functions don't have a `na.rm` argument like their counterparts, so after the first NA we will get only NAs.
+
+```{r, df_print = "paged"}
+(xNA <- c(1, 2, 3, 4, 5, NA, 6, 7, 8, 9, 10))
+cumsum(xNA) 
+cummean(xNA)
+cummax(xNA)
+cummin(xNA)
+cumprod(xNA)
+```
+
+If we want to change the direction of accumulation we can do so by ordering by another vector,
+
+```{r, df_print = "paged"}
+x
+cumsum(x)
+(rev_order <- sort(x, decreasing = TRUE))
+```
+
+wrapping our functions with `order_by()`.
+
+```{r, df_print = "paged"}
+order_by(rev_order, cumsum(x))
+```
+
+`order_by()` takes a vector of indexes as the first argument and an accumulation function as the second one.
+
+So we will accumulate the elements by the order of the indexes specified in the first argument, in this case reversing the direction of the accumulation.
+
+The output will still respect the order of the elements of the vector to be accumulated though (notice how it starts with the last value calculated (55) and not with the first one (10)).
+
+The output of a scrambled order
+
+```{r, df_print = "paged"}
+scrambled_order <- sample(x, 10)
+```
+```{r}
+tibble(x, 
+       cumsum(x), 
+       scrambled_order, 
+       "scrambled_order_cumsum(x)" = order_by(scrambled_order, cumsum(x)))
+```
+
+can be made clearer if we sort the vector to be accumulated by the order itself.
+
+```{r}
+tibble(x, 
+       cumsum(x), 
+       scrambled_order, 
+       "scrambled_order_cumsum(x)" = order_by(scrambled_order, cumsum(x))) %>%
+  select(-"cumsum(x)") %>%
+  arrange(scrambled_order)
+```
+
+Inside a function (like `tibble()`), it is advised to use `with_order()` though, which has the order as the first argument, the accumulation function as the second and the function's arguments as the third.
+
+```{r}
+tibble(x, 
+       cumsum(x), 
+       scrambled_order, 
+       "scrambled_order_cumsum(x)" = with_order(scrambled_order, cumsum, x))
+```
+
+Let's see the same example but applied to a data frame. 
+
+```{r}
+df %>%
+  slice(1:10) %>%
+  mutate(cumsum(Quantity), 
+         Scrambled_Order = scrambled_order,
+         Scrambled_Order_Cum_Sum =  with_order(scrambled_order, cumsum, Quantity), .keep = "used")
+```
+
+## - *usage with a data frame* 
+
+More generally the application of these functions with a data frame is quite straightforward: usually we filter by the values generated by the accumulation.
+
+Like we could store the cumulative sum of the quantity progressively ordered by a client
+
+```{r}
+df %>%
+  filter(`Customer ID` == 15055) %>%
+  mutate(Cumulative_Quantity = cumsum(Quantity), .keep = "used")
+```
+
+and then for example preserve the rows after a certain threshold has been reached.
+
+```{r}
+df %>%
+  filter(`Customer ID` == 15055) %>%
+  mutate(Cumulative_Quantity = cumsum(Quantity), .keep = "used") %>%
+  filter(Cumulative_Quantity >= 100)
+```
+
+Or maybe we are interested in seeing how the average daily quantity ordered by a client changed over time.
+
+```{r}
+df %>%
+  filter(`Customer ID` == 15055) %>%
+  count(Invoice_Day = as.Date(InvoiceDate), wt = Quantity, name = "Total_Daily_Quantity") %>%
+  mutate(Cumulative_Avg_Quantity = cummean(Total_Daily_Quantity))
+```
+
+In case there are NAs, besides removing them, we can turn them to 0, if we are using `cumsum()` or `cummax()`, to avoid them stopping the accumulation.
+
+```{r}
+tibble(xNA) %>%
+  mutate(Cum_Sum_NA = cumsum(xNA),
+         Cum_Max_NA = cummax(xNA),
+         x0 = coalesce(xNA, 0),
+         Cum_Sum = cumsum(x0),
+         Cum_Max = cummax(x0))
+```
+
+With the `cummean()`, `cummin()` and `cumprod()` functions recoding the NAs to 0 might not give the desired outputs and the best course of action depends on the user case (with `cummean()` we could replace the NAs with the cumulative average until that point).
+
+```{r}
+tibble(xNA) %>%
+  mutate(Cum_Mean_NA = cummean(xNA),
+         x_Cum_Mean_Lag = coalesce(xNA, lag(Cum_Mean_NA)),
+         Cum_Mean = cummean(x_Cum_Mean_Lag))
+```
+
+## - *with group_by()* 
+
+On a grouped data frame these functions work as expected so we can generalize for all the clients an example seen before, preserving the rows after a quantity threshold has been reached.
+
+```{r}
+df %>%
+  group_by(`Customer ID`) %>%
+  mutate(Cumulative_Quantity = cumsum(Quantity), .keep = "used") %>%
+  filter(Cumulative_Quantity >= 100)
+```
+
+# - *cumany() & cumall()* 
+
+`dplyr` provides two other functions to this family, `cumany()` and `cumall()`, both of which evaluate logical vectors.
+
+```{r, df_print = "paged"}
+(x <- c(1, 2, 3, 2))
+x > 2
+```
+
+`cumany()` returns TRUE values after the first TRUE, even if there are, in the logical vector, some FALSE ones after that.
+
+```{r, df_print = "paged"}
+cumany(x > 2)
+```
+
+`cumall()` instead returns FALSE values after the first FALSE, even if there are some TRUE ones after it.
+
+```{r, df_print = "paged"}
+x < 3
+cumall(x < 3)
+```
+
+## - *usage with a data frame* 
+
+With these behaviors, `cumany()` and `cumall()` can be used inside `filter()` calls to preserve rows hereafter or up to a particular one.
+
+`cumany()` is used to preserve rows after a certain condition is TRUE for the first time, the row where this happens included, regardless of the condition becoming FALSE afterwards.
+
+Like for example the rows after a stock code had a price higher than 2 for the first time.
+
+```{r}
+df %>%
+  filter(StockCode == 21232)
+df %>%
+  filter(StockCode == 21232) %>%
+  filter(cumany(Price > 2))
+```
+
+`cumall()` preserves the rows before a certain condition is no longer TRUE, regardless of it becoming TRUE again, like the rows before the price of a stock code was no longer less than 2.
+
+```{r}
+df %>%
+  filter(StockCode == 21232) %>%
+  filter(cumall(Price < 2))
+```
+
+With that in mind, we can't use `cumall()` with a condition that returns FALSE as the first outputted value, as that will preserve no rows.
+
+```{r}
+df %>%
+  filter(StockCode == 21232) %>%
+  filter(cumall(Price > 2))
+```
+
+With NAs, `||` (the non-cumulative version of `cumany()`) returns TRUE with TRUE
+
+```{r, df_print = "paged"}
+NA || TRUE
+```
+
+and NA with FALSE.
+
+```{r, df_print = "paged"}
+NA || FALSE
+```
+
+So, if there are NAs, `cumany()` will return NA instead of FALSE.
+
+```{r, df_print = "paged"}
+(xNA <- c(1, 2, 3, NA, 2))
+xNA > 3
+cumany(xNA > 3)
+```
+
+`filter()` treats the rows with NAs like FALSE so with these manipulations that is not a problem, beside the fact that `cumany()` returns TRUE after the first TRUE, so subsequent NAs are ininfluential.
+
+```{r}
+df %>%
+  filter(StockCode == "10123G")
+df %>%
+  filter(StockCode == "10123G") %>%
+  filter(cumany(`Customer ID` < 17968))
+```
+
+`&&` (the non-cumulative version of `cumall()`) instead returns NA with TRUE,
+
+```{r, df_print = "paged"}
+NA && TRUE
+NA && FALSE
+```
+
+and that could pose a problem for `cumall()`,
+
+```{r, df_print = "paged"}
+xNA
+xNA > 0
+cumall(xNA > 0)
+```
+
+as rows with NAs will not be preserved by `filter()`.
+
+```{r}
+df %>%
+  filter(StockCode == "10123G") %>%
+  slice(4:n())
+df %>%
+  filter(StockCode == "10123G") %>%
+  slice(4:n()) %>%
+  filter(cumall(`Customer ID` < 17920))
+```
+
+The only solution is to remove NAs beforehand.
+
+```{r}
+df %>%
+  filter(StockCode == "10123G" &
+           !is.na(`Customer ID`)) %>%
+  slice(3:n())
+df %>%
+  filter(StockCode == "10123G" &
+           !is.na(`Customer ID`)) %>%
+  slice(3:n()) %>%
+  filter(cumall(`Customer ID` < 17920))
+```
+
+## - *with group_by()* 
+
+With a grouped data frame the results are as expected with the computation working group-wise.
+
+```{r}
+df %>%
+  group_by(`Customer ID`)
+df %>%
+  group_by(`Customer ID`) %>%
+  filter(cumall(Quantity < 9))
+```

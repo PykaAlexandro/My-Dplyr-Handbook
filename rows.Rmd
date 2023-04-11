@@ -1,0 +1,509 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+The `rows_*` family of functions performs manipulations on the rows of our data frame by using the possible intersections with the rows of another one.
+
+It consists of
+
+```{r, eval = FALSE, df_print = "paged"}
+rows_insert()
+rows_append()
+rows_update()
+rows_patch()
+rows_upsert()
+rows_delete()
+```
+
+The intersections are determined by the `by` argument, with which we define one or several columns present in both data frames.
+
+One shared property of these functions is that our data frame remains unchanged for what it concerns the order of the rows and of the columns.
+
+# - *rows_insert()*
+
+With `rows_insert()` we can add the rows of another data frame to the tail of our own.
+
+```{r}
+df %>%
+  rows_insert(tibble(Invoice = "xxxxxx",
+                     StockCode = "xxxxxx",
+                     Description = "xxxxxx",
+                     Quantity = Inf,
+                     InvoiceDate = as.POSIXct("9999-01-01 00:00:00", tz = "UTC"),
+                     Price = Inf,
+                     `Customer ID` = Inf,
+                     Country = "xxx"), by = "Invoice") %>%
+  slice_tail(n = 10)
+```
+
+These rows are not meant to be already present in our data frame, so if they have a value in the shared column specified in by that is not extraneous, the function will throw an error.
+
+```{r, error = TRUE}
+df %>%
+  rows_insert(tibble(Invoice = "538171",
+                     StockCode = "xxxxxx",
+                     Description = "xxxxxx",
+                     Quantity = Inf,
+                     InvoiceDate = as.POSIXct("9999-01-01 00:00:00", tz = "UTC"),
+                     Price = Inf,
+                     `Customer ID` = Inf,
+                     Country = "xxx"), by = "Invoice") %>%
+  slice_tail(n = 10)
+```
+
+The values in the other columns added can be already present instead.
+
+```{r}
+df %>%
+  rows_insert(tibble(Invoice = "xxxxxx",
+                     StockCode = "21931",
+                     Description = "JUMBO STORAGE BAG SUKI",
+                     Quantity = 2,
+                     InvoiceDate = as.POSIXct("2010-12-09 20:01:00", tz = "UTC"),
+                     Price = 1.95,
+                     `Customer ID` = 17530,
+                     Country = "United Kingdom"), by = "Invoice") %>%
+  slice_tail(n = 10)
+```
+
+If we don't specify a column in `by`, the function will use the first column that is shared between the two data frames, informing us of which one with a message.
+
+```{r}
+df %>%
+  rows_insert(tibble(StockCode = "xxxxxx",
+                     Description = "xxxxxx",
+                     Quantity = Inf,
+                     InvoiceDate = as.POSIXct("9999-01-01 00:00:00", tz = "UTC"),
+                     Price = Inf,
+                     `Customer ID` = Inf,
+                     Country = "xxx")) %>%
+  slice_tail(n = 10)
+```
+
+As the `Invoice` column is absent in the data frame we add rows from, we got an NAs in the `Invoice` column.
+This occurrence can be more evident in the following more extreme example.
+
+```{r}
+df %>%
+  rows_insert(tibble(Invoice = "xxxxxx"), by = "Invoice") %>%
+  slice_tail(n = 10)
+```
+
+But it happens every time we add rows from a data frame that has a subset of columns of our own.
+
+```{r}
+df %>%
+  rows_insert(tibble(Invoice = "xxxxxx",
+                     StockCode = "xxxxxx",
+                     Description = "xxxxxx"), by = "Invoice") %>%
+  slice_tail(n = 10)
+```
+
+`rows_insert()` can add duplicated rows.
+
+```{r}
+df %>%
+  rows_insert(tibble(Invoice = "xxxxxx", Description = c("xxx", "xxx")), by = "Invoice") %>% 
+  slice_tail(n = 10)
+```
+
+As said in the introduction, the column we specify in by must be one that is present in both data frames, otherwise we will get an error.
+
+```{r, error = TRUE}
+df %>%
+  rows_insert(tibble(Invoice = "xxxxxx",
+                     StockPosition = "xxxxxx"), by = "StockPosition") %>%
+  slice_tail(n = 10)
+```
+
+Likewise we can't have, in the data frame we add rows from, columns not present in our own.
+
+```{r, error = TRUE}
+df %>%
+  rows_insert(tibble(Invoice = "xxxxxx",
+                     StockPosition = "xxxxxx"), by = "Invoice") %>%
+  slice_tail(n = 10)
+```
+
+The function will return an error as well if the types of the columns are different.
+
+```{r, error = TRUE}
+df %>%
+  rows_insert(tibble(Invoice = 999999), by = "Invoice")
+```
+
+## - *conflict*
+
+As said in the beginning, `rows_insert()` is meant to add new rows, so we can't add rows that have a value in the column specified in by already present in our data frame.
+
+```{r, error = TRUE}
+df %>%
+  rows_insert(tibble(Invoice = c("538171", "xxxxxx")), by = "Invoice")
+```
+
+We can either remove them beforehand.
+
+```{r}
+df %>%
+  rows_insert(tibble(Invoice = c("538171", "xxxxxx")) %>%
+                filter(Invoice != "538171"), by = "Invoice") %>%
+  slice_tail(n = 10)
+```
+
+Or use `conflict = "ignore"` for the rows with the same value to not be added.
+
+```{r}
+df %>%
+  rows_insert(tibble(Invoice = c("538171", "xxxxxx")), by = "Invoice", conflict = "ignore") %>%
+  slice_tail(n = 10)
+```
+
+# - *rows_append()*
+
+Another solution, to add rows with the same value, is to use `rows_append()`, which works like `rows_insert()` but it doesn't have the `by` argument.
+
+```{r}
+df %>%
+  rows_append(tibble(Invoice = c("538171", "xxxxxx"))) %>%
+  slice_tail(n = 10)
+```
+
+In the most extreme case, it adds rows even if they are duplicates of the rows of our data frame. 
+
+```{r}
+df %>%
+  rows_append(tibble(Invoice = "538171",
+                     StockCode = "21931",
+                     Description = "JUMBO STORAGE BAG SUKI",
+                     Quantity = 2,
+                     InvoiceDate = as.POSIXct("2010-12-09 20:01:00", tz = "UTC"),
+                     Price = 1.95,
+                     `Customer ID` = 17530,
+                     Country = "United Kingdom")) %>%
+  slice_tail(n = 10)
+```
+
+# - *rows_update()*
+
+`rows_update()` permits us to modify the values of the rows of our data frame, by substituting them with values from another one.
+
+The rows with the values to be substituted are identified by the values in the column specified in `by`, so at a minimum we need a tibble with a column to identify the rows and a column with the substituting values.
+
+```{r}
+df %>%
+  rows_update(tibble(Invoice = "489434", 
+                     Description = "xxxxxx"), by = "Invoice")
+```
+
+Without the latter nothing will be substituted (the function doesn't add NAs).
+
+```{r}
+df %>%
+  rows_update(tibble(Invoice = "489434"), by = "Invoice")
+```
+
+And without the former, if we use it in `by`, we miss the requirement of it existing in both data frames.
+
+```{r, error = TRUE}
+df %>%
+  rows_update(tibble(Description = "xxxxxx"), by = "Invoice")
+```
+
+If we use the latter in `by` it exists in both data frames but in our own it does without the value that identifies which rows to update.
+
+```{r, error = TRUE}
+df %>%
+  rows_update(tibble(Description = "xxxxxx"), by = "Description")
+```
+
+## - *unmatched*
+
+That was the most extreme case, but there can be instances where the data frame we retrieve the updating values from has values in the column specified in `by` that are both present and absent in our own.
+
+```{r}
+tibble(Invoice = c("489434", "xxxxxx"),
+       Description = "xxxxxx")
+```
+
+The absent values, as before, will trigger an error so in these cases we can set the `unmatched` argument to "ignore" for the updating to go through successfully.
+
+```{r}
+df %>%
+  rows_update(tibble(Invoice = c("489434", "xxxxxx"), 
+                     Description = "xxxxxx"), by = "Invoice", unmatched = "ignore")
+```
+
+We can't provide a data frame with two values in the column to be modified, even if the values are the same, as here `Invoice` doesn't uniquely identify a row of `Description`.
+
+```{r, error = TRUE}
+df %>%
+  rows_update(tibble(Invoice = "489434", 
+                     Description = c("xxxxxx", "yyyyyy")), by = "Invoice")
+df %>%
+  rows_update(tibble(Invoice = "489434", 
+                     Description = c("xxxxxx", "xxxxxx")), by = "Invoice")
+```
+
+We can modify the values of several rows though if we provide a data frame with several values to substitute with.
+
+```{r}
+df %>%
+  rows_update(tibble(Invoice = c("489434", "489435"),
+                     Description = c("xxxxxx", "yyyyyy")), by = "Invoice")
+```
+
+`by` accepts more than one column, in this way we can be more precise with what values we want to substitute.
+
+```{r}
+df %>%
+  rows_update(tibble(Invoice = c("489434", "489435"),
+                     StockCode = c("85048", "22350"),
+                     Description = c("xxxxxx", "yyyyyy")), by = c("Invoice", "StockCode"))
+```
+
+Like `rows_insert()`, in case we don't specify `by`, the function will use the first shared column.
+
+```{r}
+df %>%
+  rows_update(tibble(Invoice = "489434", 
+                     Description = "xxxxxx"))
+```
+
+So in case of two columns `by` is mandatory otherwise the function will use only the first shared one, replacing also the `StockCode` values.
+
+```{r}
+df %>%
+  rows_update(tibble(Invoice = c("489434", "489435"),
+                     StockCode = c("85048", "22350"),
+                     Description = c("xxxxxx", "yyyyyy")))
+```
+
+As with `rows_insert()`, the function will return an error if the types of the columns are different.
+
+```{r, error = TRUE}
+df %>%
+  rows_update(tibble(Invoice = 489434, 
+                     Country = "xxx"), by = "Invoice")
+```
+
+# - *rows_patch()*
+
+If we wish to only modify NA values, we can use `rows_patch()`, that works like `rows_update()`, therefore the data frame we provide needs a column to identify the rows with NAs (the one specified in `by`) and one or several columns with the values to substitute the NAs with.
+
+```{r}
+df %>%
+  filter(Invoice == "489521")
+df %>%
+  filter(Invoice == "489521") %>%
+  rows_patch(tibble(Invoice = "489521",
+                    `Customer ID` =  Inf), by = "Invoice")
+df %>%
+  filter(Invoice == "489521") %>%
+  rows_patch(tibble(Invoice = "489521",
+                    Description = "xxxxxx",
+                    `Customer ID` =  Inf), by = "Invoice")
+```
+
+So we can see it like a safer version of `rows_update()`, to avoid to accidentally modify non NAs values.
+
+```{r}
+df %>%
+  filter(Invoice %in% c("489521", "489522"))
+df %>%
+  filter(Invoice %in% c("489521", "489522")) %>%
+  rows_patch(tibble(Invoice = c("489521", "489522"),
+                    Description = "xxxxxx",
+                    `Customer ID` =  Inf), by = "Invoice")
+df %>%
+  filter(Invoice %in% c("489521", "489522")) %>%
+  rows_update(tibble(Invoice = c("489521", "489522"),
+                     Description = "xxxxxx",
+                     `Customer ID` =  Inf), by = "Invoice")
+```
+
+Like `rows_update()` we can omit the `by` argument, and the function will use the first shared column.
+
+```{r}
+df %>%
+  filter(Invoice == "489521") %>%
+  rows_patch(tibble(Invoice = "489521",
+                    `Customer ID` =  Inf))
+```
+
+Likewise we can use two columns to be more precise (and as with `rows_update()` here `by` is logically necessary).
+
+```{r}
+df %>%
+  filter(Invoice == "537434") %>%
+  rows_patch(tibble(Invoice = "537434",
+                    StockCode = "20725",
+                    `Customer ID` =  Inf), by = c("Invoice", "StockCode"))
+```
+
+We can set `unmatched` to "ignore" in case the data frame that contains the values that will replace the NAs in our own has rows not present in that.
+ 
+```{r}
+df %>%
+  filter(Invoice == "489521") %>%
+  rows_patch(tibble(Invoice = c("489521", "xxxxxx"),
+                    `Customer ID` =  Inf), by = "Invoice", unmatched = "ignore")
+```
+
+# - *rows_upsert()*
+
+`rows_upsert()` is a function that has two different applications.
+
+It works like `rows_insert()` when the value in the columns specified in `by` is not present, effectively adding rows.
+
+```{r}
+df %>%
+  rows_upsert(tibble(Invoice = "xxxxxx"), by = "Invoice") %>%
+  slice_tail(n = 10)
+```
+
+And like `rows_update()` if it is, updating values.
+
+```{r}
+df %>%
+  rows_upsert(tibble(Invoice = "489434", 
+                     Description = "xxxxxx"), by = "Invoice")
+```
+
+So it can be useful to perform two manipulations at the same time.
+
+```{r}
+df %>%
+  rows_upsert(tibble(Invoice = c("538171", "xxxxxx"),
+                     Description = c("xxxxxx", "yyyyyy")), by = "Invoice") %>%
+  slice_tail(n = 10)
+```
+
+# - *rows_delete()*
+
+`rows_delete()` removes the rows that share the same values in the column specified in `by`. 
+
+```{r}
+df %>%
+  rows_delete(tibble(Invoice = "489434"), by = "Invoice")
+df %>%
+  rows_delete(tibble(Invoice = c("489434", "489435")), by = "Invoice")
+```
+
+To use this function, a one column data frame is sufficient, as other columns will be regarded as extra and ignored.
+
+```{r}
+df %>%
+  rows_delete(tibble(Invoice = "489434", StockCode = "85048"), by = "Invoice")
+```
+
+Like the other functions, when we don't specify a column in by `rows_delete()` will use the first shared column. 
+
+```{r}
+df %>%
+  rows_delete(tibble(StockCode = "85048"))
+```
+
+And the function will return an error if the types of the columns are different.
+
+```{r, error = TRUE}
+df %>%
+  rows_delete(tibble(Invoice = 489434), by = "Invoice")
+```
+
+Like `rows_update()` and `rows_patch()`, also `rows_delete()` has the unmatched argument that can be set to ignore when we want to use a data frame that has values non present in our own in the column specified in `by`.
+
+```{r}
+df %>%
+  rows_delete(tibble(Invoice = c("489434", "999999")), by = "Invoice", unmatched = "ignore")
+```
+
+# - *with group_by()*
+
+These functions don't present specific behaviors when applied to a grouped data frame.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  rows_insert(tibble(Invoice = "xxxxxx"), by = "Invoice") %>%
+  ungroup() %>%
+  slice_tail(n = 10)
+df %>%
+  group_by(Invoice) %>%
+  rows_update(tibble(Invoice = "489434", 
+                     Description = "xxxxxx"), by = "Invoice")
+df %>%
+  group_by(Invoice) %>%
+  filter(Invoice == "489521") %>%
+  rows_patch(tibble(Invoice = "489521",
+                    `Customer ID` =  Inf), by = "Invoice")
+df %>%
+  group_by(Invoice) %>%
+  rows_upsert(tibble(Invoice = c("538171", "xxxxxx"),
+                     Description = "xxxxxx"), by = "Invoice") %>%
+  ungroup() %>%
+  slice_tail(n = 10)
+df %>%
+  group_by(Invoice) %>%
+  rows_delete(tibble(Invoice = "489434"), by = "Invoice")
+```

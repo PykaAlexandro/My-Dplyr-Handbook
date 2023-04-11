@@ -1,0 +1,271 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+These are some functions we can use when we need to compare two different sets in regard to the elements they contain.
+Here we will be comparing data frames where the elements of the sets are defined as their rows.
+
+```{r}
+(set1 <- df %>% 
+  slice(1:10))
+(set2 <- df %>% 
+  slice(6:15))
+```
+
+# - *intersect()*
+
+`intersect()` returns the unique elements common to both sets, like an AND.
+
+```{r}
+intersect(set1,
+          set2)
+```
+
+# - *union()*
+
+`union()` merges the two sets, keeping only the unique elements, like an OR.
+
+```{r}
+union(set1,
+      set2)
+```
+
+# - *union_all()*
+
+If we want to keep the duplicates as well we must use `union_all()`.
+
+```{r}
+union_all(set1,
+          set2)
+```
+
+# - *setdiff()*
+
+`setdiff()` returns the unique elements of the set specified first not present in the one specified second.
+
+```{r}
+setdiff(set1,
+        set2)
+setdiff(set2,
+        set1)
+```
+
+# - *symdiff()*
+
+`symdiff()` returns the unique elements of the set specified first not present in the one specified second, together with the unique elements of the set specified second not present in the one specified first, thus not returning the elements present in both sets, like the `filter()` helper `xor()`.
+
+```{r}
+symdiff(set1,
+        set2)
+```
+
+# - *setequal() / identical()*
+
+`setequal()` returns logical values, TRUE if the two sets are equal and FALSE otherwise.
+
+```{r, df_print = "paged"}
+setequal(set1,
+         set1)
+setequal(set1,
+         set2)
+```
+
+For this task though `identical()` from base `R` is more strict and to be preferred in my opinion.
+
+```{r, df_print = "paged"}
+setequal(set1,
+         set1 %>%
+           arrange(desc(Invoice)))
+identical(set1,
+          set1 %>%
+           arrange(desc(Invoice)))
+identical(df,
+          df %>% 
+            select(8:1))
+identical(df,
+          df %>%
+            group_by(Country))
+```
+
+# - *is.element()*
+
+We can use `is.element()` if we want to know if one value is contained in a particular set.
+
+```{r, df_print = "paged"}
+is.element("WHITE CHERRY LIGHTS", unlist(set1))
+```
+
+The set must be a vector, that's why we used `unlist()` (in `R`, a data frame is a list of vectors).
+
+# - *consistency of sets*
+
+For all these functions is important that the sets we compare are of the same class, otherwise we will get an error if the first object is a data frame and the second one a vector.
+
+```{r, error = TRUE}
+intersect(df %>% 
+            select(Invoice),
+          df$Invoice)
+union(df %>% 
+        select(Invoice),
+      df$Invoice)
+union_all(df %>%
+            select(Invoice),
+          df$Invoice)
+setdiff(df %>% 
+          select(Invoice),
+        df$Invoice)
+symdiff(df %>% 
+          select(Invoice),
+        df$Invoice)
+setequal(df %>%
+           select(Invoice),
+         df$Invoice)
+```
+
+And incongruous results, bar for `setequal()` and an error for `union_all()`, if the first object is a vector.
+
+```{r, error = TRUE, df_print = "paged"}
+intersect(df$Invoice[1:10],
+          set2 %>% 
+            select(Invoice))
+union(df$Invoice[1:10],
+      set2 %>% 
+        select(Invoice))
+union_all(df$Invoice[1:10],
+          set2 %>% 
+            select(Invoice))
+setdiff(df$Invoice[1:10],
+        set2 %>% 
+          select(Invoice))
+symdiff(df$Invoice[1:10],
+        set2 %>% 
+          select(Invoice))
+setequal(df$Invoice[1:10],
+         set2 %>% 
+          select(Invoice))
+```
+
+When the two objects are both data frames is important that the columns are the same (in names and types as well).
+
+```{r, error = TRUE}
+intersect(set1 %>%
+            select(1:7),
+          set2)
+union(set1 %>%
+        select(1:7),
+      set2)
+union_all(set1 %>%
+            select(1:7),
+          set2)
+setdiff(set1 %>%
+          select(1:7),
+        set2)
+symdiff(set1 %>%
+          select(1:7),
+        set2)
+```
+
+With two vectors there are no problems.
+
+```{r, df_print = "paged"}
+intersect(set1$Invoice,
+          set2$Invoice)
+union(set1$Invoice,
+      set2$Invoice)
+union_all(set1$Invoice,
+          set2$Invoice)
+setdiff(set1$Invoice,
+        set2$Invoice)
+setequal(set1$Invoice,
+         set2$Invoice)
+symdiff(set1$Invoice,
+        set2$Invoice)
+```
+
+# - *with group_by()*
+
+When the data frames are grouped, the output inherits the grouping of the first set.
+
+```{r}
+intersect(set1 %>%
+            group_by(Country),
+          set2 %>%
+            group_by(`Customer ID`))
+union(set1 %>%
+        group_by(Country),
+      set2 %>%
+        group_by(`Customer ID`))
+union_all(set1 %>%
+            group_by(Country),
+          set2 %>%
+            group_by(`Customer ID`))
+setdiff(set1 %>%
+          group_by(Country),
+        set2 %>%
+          group_by(`Customer ID`))
+symdiff(set1 %>%
+          group_by(Country),
+        set2 %>%
+          group_by(`Customer ID`))
+```

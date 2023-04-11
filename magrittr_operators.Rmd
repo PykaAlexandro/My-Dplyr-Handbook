@@ -1,0 +1,288 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo = FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+# - *the magrittr pipe operator %>%*
+
+In this handbook we extensively used the pipe operator `%>%`, which permits us to avoid using intermediate objects or nesting several functions, like in the following example.
+
+```{r}
+slice_head(filter(df, Country == "United Kingdom"), n = 5)
+```
+
+That results in lines of code that are easier to decipher and to extend.
+
+```{r}
+df %>%
+  filter(Country == "United Kingdom") %>%
+  slice_head(n = 5)
+```
+
+The pipe operator works by feeding the object on its left as the first argument of the function on its right.
+Many `dplyr` functions have `.data` as the first argument, so we can see why the pipe is so useful and largely adopted, as with it we can "carry" the data frame through different transformations in one single "piece" of code.
+
+The pipe operator can also be nested inside functions, usually to modify the value of an argument.
+
+```{r}
+df %>%
+  filter(Country == "United Kingdom") %>%
+  slice_head(n = 5.4 %>% floor)
+```
+
+Notice how we wrote `floor` instead of `floor()`. This is another property of the pipe: when only one argument is needed, we can omit the empty parentheses.
+
+## - *the dot as a placeholder*
+
+When instead we want to feed the object on the left to an argument that is not the first, we can use a dot (`.`) as a placeholder.
+
+```{r}
+df %>% 
+  pull(Price) %>% 
+  slice_min(df, order_by = ., n = 10, with_ties = FALSE)
+```
+
+In other cases we might need to use the object on the left several times, usually as `.data` and for one of its properties, like one of its dimensions,
+
+```{r}
+df %>%
+  filter(row_number() < nrow(df) / 2)
+```
+
+but it is not a problem to use the dot as many times as we need.
+
+```{r}
+df %>%
+  filter(., row_number() < nrow(.) / 2)
+```
+
+Plus it is necessary in case we performed some transformations on the object, as `df` will refer to the unmodified one.
+
+```{r}
+df %>%
+  slice(1:5) %>%
+  filter(., row_number() < nrow(df) / 2)
+df %>%
+  slice(1:5) %>%
+  filter(., row_number() < nrow(.) / 2)
+```
+
+In the last  examples we specified the dot also as the first argument but it is not really necessary as, when we use the placeholder inside a nested function (`nrow()` in our case), the default is use the object on the left as the first argument of the nesting function as well.
+So we usually remove it.
+
+```{r}
+df %>%
+  slice(1:5) %>%  
+  filter(row_number() < nrow(.) / 2)
+```
+
+This default can be problematic when we use functions that don't need `.data` as the first argument but we can override this behavior by embracing the function on the right with curly braces `({})`.
+
+```{r, df_print = "paged"}
+df %>% 
+  slice(1:5) %>%  
+  pull(Price) %>%
+  {c(mean(.), sd(.))}
+```
+
+Without the curly braces `dplyr` will use the object on the left as the first argument, effectively concatenating it in this case with the wished output.
+
+```{r, df_print = "paged"}
+df %>% 
+  slice(1:5) %>%
+  pull(Price) %>%
+  c(mean(.), sd(.))
+```
+
+Also, we can freely pipe functions like `lm()` and use the dot notation in their formulas, as it will not be mistaken for the placeholder (that we here used for the `data` argument).
+
+```{r, df_print = "paged"}
+df %>%
+  select(Quantity, Price) %>%
+  lm(Price ~ ., .)
+```
+
+We must be careful with grouped data frames though, as the dot placeholder doesn't refer to each specific group but to the whole data frame, so in this case it is not the the number of rows of each group that is divided by 2 but the overall total number of rows of the whole data frame.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(., row_number() < nrow(.) / 2)
+```
+
+Just like if we used `df` instead of `.` inside `nrow()`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(row_number() < nrow(df) / 2)
+```
+
+If we wanted to preserve, for each group, the rows whose index is less than half its number of rows, we can use `n()`, which instead refers to the number of rows of the group.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(row_number() < n() / 2)
+```
+
+The pipe has other functionalities but, as they are not strictly related to `dplyr`, they will not be discussed here.
+The reference manual (https://cran.r-project.org/web/packages/magrittr/magrittr.pdf) is a good place to start to investigate them.  
+
+# - *other magrittr operators*
+
+The pipe operator `%>%` is from the `magrittr` package and it is loaded when loading `dplyr`.
+`magrittr` has other operators though and when we want to use them we need to load the package.
+
+```{r}
+library(magrittr)
+```
+
+## - *the “tee” pipe %T>%*
+
+The “tee” pipe `%T>%` lets you "bypass" a function in the chain while still outputting its results, essentially "carrying" the object on its left to the function after the immediately next one. This can be useful when we want an output from a function but this output it is not usable by the following one.
+For example we might want to output both a graph and a summary table from a data frame.
+
+```{r, df_print = "paged"}
+df %>%
+  filter(Country == "Korea") %>%
+  select(Quantity) %T>%
+  plot() %>%
+  table()
+```
+
+## - *the “exposition” pipe %$%*
+
+If we want to pipe functions, like many base `R` ones, that work with vectors and don't have `.data` as their first argument, we can use the “exposition” pipe `%$%`, which "exposes" the column's names of the data frame to made them usable, for example, by a function like `table()`.
+
+```{r, df_print = "paged", error = TRUE}
+df %>%
+  table(Country)
+df %$%
+  table(Country)
+```
+
+Another way to circumvent the issue is by pulling or selecting the vector from the data frame with the appropriate function.
+
+```{r, df_print = "paged"}
+df %>%
+  pull(Country) %>%
+  table()
+df %>% 
+  select(Country) %>%
+  table()
+```
+
+## - *the “assignment” pipe %<>%*
+
+This pipe is used to assign the output of a chain to its first element, besides outputting it. It must be used as the first pipe in the chain.
+
+```{r, df_print = "paged"}
+library(ggplot2) 
+UK_clients_plot <- df
+UK_clients_plot %<>%
+  filter(Country == "United Kingdom") %>%
+  ggplot(aes(`Customer ID`)) +
+  geom_bar()
+```
+
+Without it we would have written
+
+```{r}
+UK_clients_plot <- df %>%
+  filter(Country == "United Kingdom") %>%
+  ggplot(aes(`Customer ID`)) +
+  geom_bar()
+```
+
+but that doesn't show the graph, unless we wrap everything with parentheses.
+
+```{r, df_print = "paged"}
+(UK_clients_plot <- df %>%
+  filter(Country == "United Kingdom") %>%
+  ggplot(aes(`Customer ID`)) +
+  geom_bar())
+```
+
+Be aware that it can be quite dangerous to use as it rewrites the first element of the chain (that is why we first copied `df` to `UK_clients_plot`, to not overwrite our data frame with a plot).
+
+It can be useful to quickly update a column though,
+
+```{r, df_print = "paged"}
+df %$%
+  table(Country, useNA = "ifany")
+df$Country %<>% na_if("Unspecified")
+df %$%
+  table(Country, useNA = "ifany")
+```
+
+instead of writing
+
+```{r}
+df <- df %>%
+  mutate(Country = na_if(Country, "Unspecified"))
+```
+
+# - *the R pipe |>*
+
+Since version 4.1, also base `R` has its pipe operator, `|>`. Its purpose is the same as the magrittr pipe `%>%` but it has less functionalities (no dots as placeholders for example). In case of interest, there are further information at this link: https://www.tidyverse.org/blog/2023/04/base-vs-magrittr-pipe/

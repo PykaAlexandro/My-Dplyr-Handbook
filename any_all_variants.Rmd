@@ -1,0 +1,680 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+`any()` and `all()`, two base `R` functions, can be used with several `dplyr` verbs. Besides that, they have as well some variants with very specific employments, so I thought it useful to retread all their applications in one page, for an easier consulting when the need arises.
+
+# - *fundamentals*
+
+Their purpose is to evaluate logical vectors returning one single value as the output.
+
+If any of the elements of the vector is TRUE, `any()` returns TRUE.
+
+```{r, df_print = "paged"}
+(x <- c(1, 2, 3))
+x > 2
+any(x > 2)
+```
+
+If none is, it returns FALSE.
+ 
+```{r, df_print = "paged"}
+x > 3
+any(x > 3)
+```
+
+If all the elements are TRUE, `all()` returns TRUE,
+
+```{r, df_print = "paged"}
+x > 0
+all(x > 0)
+```
+
+and if there is just one FALSE, it returns FALSE.
+
+```{r, df_print = "paged"}
+x > 1
+all(x > 1)
+```
+
+It is like `any()` chains many OR expressions,
+
+```{r, df_print = "paged"}
+any(x > 2)
+1 > 2 | 2 > 2 | 3 > 2
+any(x > 3)
+1 > 3 | 2 > 3 | 3 > 3
+```
+
+while `all()` many AND ones.
+
+```{r, df_print = "paged"}
+all(x > 0)
+1 > 0 & 2 > 0 & 3 > 0
+all(x > 1)
+1 > 1 & 2 > 1 & 3 > 1
+```
+
+# - *with filter() on grouped_dfs*
+
+With these behaviors, we can use them in `filter()` calls on grouped data frames to preserve all the rows of groups that either at times or all the times satisfy a condition.
+
+For example we might want to use `any()` to preserve all the rows of the stock codes that had a negative value in the `Quantity` column at least once.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  filter(any(Quantity < 0))
+```
+
+So, for every stock code, if there is at least one row with `Quantity < 0` (which will therefore return TRUE), all that stock code's rows will be preserved, even if the other values in the `Quantity` column are positive.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  filter(any(Quantity < 0)) %>%  
+  filter(StockCode == "85048") %>%
+  select(StockCode, Quantity)
+```
+
+With `all()` instead we would preserve the stock codes that always had negative values, as all of their rows will return TRUE.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  filter(all(Quantity < 0))
+df %>%
+  group_by(StockCode) %>%
+  filter(all(Quantity < 0)) %>%
+  ungroup() %>%
+  summarise(`# of StockCodes` = n_distinct(StockCode),
+            `% of StockCodes with Negative Quantities` = formattable::percent(mean(Quantity < 0)))
+```
+
+Without `any()` or `all()` we would just preserve the rows with negative quantities, regardless of what group they belong to.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  filter(Quantity < 0)
+```
+
+Additionally, this operation yields the same results on grouped and ungrouped data frames.
+
+```{r}
+df %>%
+  filter(Quantity < 0)
+```
+
+Another example could be when we use an aggregate function like `mean()`.
+
+Here for instance we preserve the rows of the stock codes that had at least once a `Price` higher than the mean of their prices.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  filter(any(Price > mean(Price)))
+```
+
+## - *interactions between NAs & TRUE or FALSE*
+
+We remind the outputs of the interactions between NAs and the logical constants TRUE and FALSE in OR statements.
+
+```{r, df_print = "paged"}
+NA | TRUE 
+NA | FALSE
+```
+
+Because the vectors we evaluate can sometimes have NAs,
+
+```{r, df_print = "paged"}
+(xNA <- c(1, 2, 3, NA))
+xNA > 3
+```
+
+so in case we apply `any()` on a vector with FALSEs and NAs we can get an NA instead of FALSE.
+
+```{r, df_print = "paged"}
+any(xNA > 3)
+```
+
+To prevent that we can use the `na.rm` argument, even if `filter()` treats NAs as FALSE so that should not constitute a problem.
+
+```{r, df_print = "paged"}
+any(xNA > 3, na.rm = TRUE)
+```
+
+With `all()` instead, an NA could prevent it to output TRUE.
+
+```{r, df_print = "paged"}
+NA & TRUE
+NA & FALSE
+xNA > 0
+all(xNA > 0)
+```
+
+So here the `na.rm` argument becomes necessary.
+
+```{r, df_print = "paged"}
+all(xNA > 0, na.rm = TRUE)
+```
+
+# - *with summarise() on grouped_dfs*
+
+As they compress one vector into one value, `any()` and `all()` work well with the akin function `summarise()` on grouped data frames.
+
+For example we may want to know which invoices have at least one stock code with a `Price` higher than 5,
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(One_Price_Higher_5 = any(Price > 5))
+```
+
+or the ones that have all of the stock codes with a `Price` higher than 5.
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(All_Prices_Higher_5 = all(Price > 5))
+```
+
+Exploiting the properties of TRUE and FALSE (that evaluate to 1 and 0 in calculations),
+
+```{r, df_print = "paged"}
+TRUE + TRUE
+TRUE + FALSE
+```
+
+we can also use `any()` and `all()` to create tables with counts and proportions. 
+
+```{r}
+df %>%
+  group_by(Invoice) %>%
+  summarise(One_Price_Higher_100 = any(Price > 100))
+df %>%
+  group_by(Invoice) %>%
+  summarise(One_Price_Higher_100 = any(Price > 100)) %>%
+  summarise(`Tot # Invoices` = n(),
+            `# Invoices with Expensive Items` = sum(One_Price_Higher_100),
+            `% Invoices with Expensive Items` = formattable::percent(mean(One_Price_Higher_100)))
+```
+
+As seen in the `interactions between NAs & TRUE or FALSE` sub-section, NAs can modify the output of `any()` and `all()`, returning NA instead of a logical value.
+
+```{r, df_print = "paged"}
+xNA
+xNA > 3
+any(xNA > 3)
+xNA > 0
+all(xNA > 0)
+```
+
+That could be a problem with `summarise()` when the columns we are evaluating have NAs in them,
+
+```{r}
+df %>%
+  rows_append(tibble(Invoice = "489435")) %>%
+  arrange(Invoice, !is.na(StockCode))
+```
+
+as that could modify the desired output.
+
+```{r}
+df %>%
+  rows_append(tibble(Invoice = "489435")) %>%
+  group_by(Invoice) %>%
+  summarise(One_Price_Higher_5 = any(Price > 5))
+```
+
+To prevent that, we can use the `na.rm` argument, available for both `any()` and `all()`.
+
+```{r}
+df %>%
+  rows_append(tibble(Invoice = "489435")) %>%
+  group_by(Invoice) %>%
+  summarise(One_Price_Higher_5 = any(Price > 5, na.rm = TRUE))
+```
+
+# - *with where() inside select() calls*
+
+`where()` is a `select()` helper that allows to use predicate functions (i.e. functions that return logical values, like `any()` and `all()`), for example to only preserve numerical columns.
+
+```{r}
+df %>%
+  select(where(is.numeric))
+```
+
+The way it works is by testing the condition "is the column numerical?" on every column, returning a logical vector as the output. `select()` will then preserve the columns whose positions match the ones with a TRUE value in the output returned by `where()`.
+
+With that in mind, it is easy to see how we can utilize `any()` or `all()` inside of it, for example to preserve the columns with some NAs (we utilize the `~` formula-like syntax here),
+
+```{r}
+df %>%
+  select(where(~ any(is.na(.x))))
+```
+
+or the ones where all the values are some specific ones.
+
+```{r}
+df %>%
+  mutate(Country = Country,
+         IT_Country = rep("Italy"),
+         FR_Country = rep("France"),
+         UK_Country = rep("United Kingdom"), .keep = "used")
+df %>%
+  mutate(Country = Country,
+         IT_Country = rep("Italy"),
+         FR_Country = rep("France"),
+         UK_Country = rep("United Kingdom"), .keep = "used") %>%
+  select(where(~ all(.x %in% c("Italy", "France"))))
+```
+
+We can also find situations where the `na.rm` argument can be useful, for example here where we only want to preserve the columns, amongst the numerical ones, with at least one value higher than the mean of them.
+
+```{r, error = TRUE}
+df %>%
+  select(where(is.numeric)) %>%
+  select(where(~ any(.x > mean(.x))))
+```
+
+Without `na.rm = TRUE` we received an error as the column `Customer ID` has NAs in it, so its mean is NA and a test with NAs always returns NA.
+
+```{r, df_print = "paged"}
+13085 > NA
+```
+
+Evaluating that column `any()` will then return one NA and those are not accepted by `where()`.
+
+With `na.rm = TRUE` we can remove that value and allow the operation to return an output without errors.
+
+```{r}
+df %>%
+  select(where(is.numeric)) %>%
+  select(where(~ any(.x > mean(.x), na.rm = TRUE)))
+```
+
+We could have as well removed the NAs from the `Customer ID` column by applying `na.rm = TRUE` to `mean()`. The result is different as here we will preserve also the aforementioned column, as its average is not NA anymore.
+
+```{r}
+df %>%
+  select(where(is.numeric)) %>%
+  select(where(~ any(.x > mean(.x, na.rm = TRUE))))
+```
+
+Using a unique `select()` call would have issued some warnings, per the preemptive evaluation of the `mean()` function also to non numerical columns. We didn't receive an error as `mean()`, thanks to the `&` operator, is only effectively applied to numerical columns.
+
+```{r}
+df %>%
+  select(where(~ is.numeric(.x) &
+                 any(.x > mean(.x), na.rm = TRUE)))
+```
+
+# - *variants*
+
+## - *any_of() & all_of() with select() or rename()*
+
+`any_of()` and `all_of()` are two `select()` helpers that must be used when we have columns' names stored in an external vector,
+
+```{r}
+cols_vec <- c("Invoice", "InvoiceDate")
+df %>%
+  select(any_of(cols_vec))
+df %>%
+  select(all_of(cols_vec))
+```
+
+as without them we would receive a warning.
+
+```{r}
+df %>%
+  select(cols_vec)
+```
+
+Their difference comes off when a column from the vector is not present in the data frame, as `all_of()`throws an error,
+
+```{r, error = TRUE}
+cols_vec <- c("Invoice", "InvoiceDate", "Shipment")
+df %>%
+  select(all_of(cols_vec))
+```
+
+where `any_of()` returns just the columns of the data frame that match the ones in the vector.
+
+```{r}
+df %>%
+  select(any_of(cols_vec))
+```
+
+The same behavior is present in case of de-selections.
+
+```{r, error = TRUE}
+df %>%
+  select(-all_of(cols_vec))
+df %>%
+  select(-any_of(cols_vec))
+```
+
+`any_of()` and `all_of()` can be used with `rename()` as well, when we have a vector with the modifications we want to apply.
+
+```{r}
+any_new_names <- c(CUSTOMER_ID = "Customer ID", COUNTRY = "Country", SHIPMENT = "Shipment")
+df %>%
+  rename(any_of(any_new_names))
+all_new_names <- c(CUSTOMER_ID = "Customer ID", COUNTRY = "Country")
+df %>%
+  rename(all_of(all_new_names))
+```
+
+By the same token as with `select()`, all of the columns to be modified must be present in the data frame when we use `all_of()`.
+
+```{r, error = TRUE}
+df %>%
+  rename(all_of(any_new_names))
+```
+
+## - *cumany() & cumall() with filter()*
+
+Two other variants are `cumany()` and `cumall()`, two cumulative aggregate window functions, both of which evaluate logical vectors.
+
+```{r, df_print = "paged"}
+(x <- c(1, 2, 3, 2))
+x > 2
+```
+
+`cumany()` returns TRUE values after the first TRUE, even if there are, in the logical vector, some FALSE ones after that.
+
+```{r, df_print = "paged"}
+cumany(x > 2)
+```
+
+`cumall()` instead returns FALSE values after the first FALSE, even if there are some TRUE ones after it.
+
+```{r, df_print = "paged"}
+x < 3
+cumall(x < 3)
+```
+
+With these behaviors, `cumany()` and `cumall()` can be used inside `filter()` calls to preserve rows hereafter or up to a particular one.
+
+`cumany()` is used to preserve rows after a certain condition is TRUE for the first time, the row where this happens included, regardless of the condition becoming FALSE afterwards.
+
+Like for example the rows after a stock code had a price higher than 2 for the first time.
+
+```{r}
+df %>%
+  filter(StockCode == 21232)
+df %>%
+  filter(StockCode == 21232) %>%
+  filter(cumany(Price > 2))
+```
+
+`cumall()` preserves the rows before a certain condition is no longer TRUE, regardless of it becoming TRUE again, like the rows before the price of a stock code was no longer less than 2.
+
+```{r}
+df %>%
+  filter(StockCode == 21232) %>%
+  filter(cumall(Price < 2))
+```
+
+With that in mind, we can't use `cumall()` with a condition that returns FALSE as the first outputted value, as that will preserve no rows.
+
+```{r}
+df %>%
+  filter(StockCode == 21232) %>%
+  filter(cumall(Price > 2))
+```
+
+With NAs, `||` (the non-cumulative version of `cumany()`) returns TRUE with TRUE
+
+```{r, df_print = "paged"}
+NA || TRUE
+```
+
+and NA with FALSE.
+
+```{r, df_print = "paged"}
+NA || FALSE
+```
+
+So, if there are NAs, `cumany()` will return NA instead of FALSE.
+
+```{r, df_print = "paged"}
+(xNA <- c(1, 2, 3, NA, 2))
+xNA > 3
+cumany(xNA > 3)
+```
+
+`filter()` treats the rows with NAs like FALSE so with these manipulations that is not a problem, beside the fact that `cumany()` returns TRUE after the first TRUE, so subsequent NAs are ininfluential.
+
+```{r}
+df %>%
+  filter(StockCode == "10123G")
+df %>%
+  filter(StockCode == "10123G") %>%
+  filter(cumany(`Customer ID` < 17968))
+```
+
+`&&` (the non-cumulative version of `cumall()`) instead returns NA with TRUE,
+
+```{r, df_print = "paged"}
+NA && TRUE
+NA && FALSE
+```
+
+and that could pose a problem for `cumall()`,
+
+```{r, df_print = "paged"}
+xNA
+xNA > 0
+cumall(xNA > 0)
+```
+
+as rows with NAs will not be preserved by `filter()`.
+
+```{r}
+df %>%
+  filter(StockCode == "10123G") %>%
+  slice(4:n())
+df %>%
+  filter(StockCode == "10123G") %>%
+  slice(4:n()) %>%
+  filter(cumall(`Customer ID` < 17920))
+```
+
+The only solution is to remove NAs beforehand.
+
+```{r}
+df %>%
+  filter(StockCode == "10123G" &
+           !is.na(`Customer ID`)) %>%
+  slice(3:n())
+df %>%
+  filter(StockCode == "10123G" &
+           !is.na(`Customer ID`)) %>%
+  slice(3:n()) %>%
+  filter(cumall(`Customer ID` < 17920))
+```
+
+## - *if_any() & if_all() with filter() in place of across()*
+
+`if_any()` and `if_all()` are two substitutes of `across()` to be used in `filter()` call, as its use is deprecated.
+
+```{r}
+df %>%
+  filter(Quantity > 5 &
+           Price > 5)
+df %>%
+  filter(across(c(Quantity, Price), ~ .x > 5))
+```
+
+Their purpose is the same, to apply the same manipulation to different columns. We use `if_all()` when we want to preserve the rows that have, for example, a value greater than 5 in all of the columns selected,
+
+```{r}
+df %>%
+  filter(if_all(c(Quantity, Price), ~ .x > 5))
+```
+
+and `if_any()` in case we want to preserve the ones that have a value greater than 5 in any of them.
+
+```{r}
+df %>%
+  filter(Quantity > 5 |
+           Price > 5)
+df %>%
+  filter(if_any(c(Quantity, Price), ~ .x > 5))
+```
+
+Note that, while the first example could be written with `across()` instead of `if_all()`, for the second one we can only use `if_any()`.
+
+We can also use them to filter for the same interval on several columns, either on all of them at the same time,
+
+```{r}
+df %>%
+  filter(between(Quantity, 10, 20) &
+           between(Price, 10, 20))
+df %>%
+  filter(if_all(c(Quantity, Price), ~ between(.x, 10, 20)))
+df %>%
+  filter(if_all(c(Quantity, Price), ~ .x >= 10 & .x <= 20))
+
+```
+
+or just on any of them.
+
+```{r}
+df %>%
+  filter(between(Quantity, 10, 20) |
+           between(Price, 10, 20))
+df %>%
+  filter(if_any(c(Quantity, Price), ~ between(.x, 10, 20)))
+df %>%
+  filter(if_any(c(Quantity, Price), ~ .x >= 10 & .x <= 20))
+```
+
+By design though they don't understand `cur_column()` so if we want to filter each column for a different value,
+
+```{r}
+df %>%
+  filter(Quantity > 2 &
+           Price > 10)
+```
+
+we need to use `across()` (thus an `&` statement) therefore we can only preserve the rows where both conditions are TRUE at the same time.
+
+```{r}
+fltr <- list(Quantity = 2, 
+             Price = 10)
+df %>%
+  filter(across(c(Quantity, Price), ~ .x > fltr[[cur_column()]]))
+```
+
+Another example with `between()`, where we filter on two columns for different ranges.
+
+```{r}
+df %>%
+  filter(between(Quantity, 10, 20) &
+           between(Price, 20, 30))
+
+fltr2 <- list(Quantity = c(10, 20),
+               Price = c(20, 30))
+df %>%
+  filter(across(c(Quantity, Price), ~ between(.x, fltr2[[cur_column()]][1], fltr2[[cur_column()]][2])))
+```
+
+If the data frame already has logical columns,
+
+```{r}
+df %>%
+  mutate(Boolean_TFT = rep(c(TRUE, FALSE, TRUE), length.out = nrow(df)),
+         Boolean_TF = rep(c(TRUE, FALSE), length.out = nrow(df)), .before = "Invoice")
+```
+
+`if_any()` and `if_all()` can be used also without a function.
+
+```{r}
+df %>%
+  mutate(Boolean_TFT = rep(c(TRUE, FALSE, TRUE), length.out = nrow(df)),
+         Boolean_TF = rep(c(TRUE, FALSE), length.out = nrow(df)), .before = "Invoice") %>%
+  filter(if_any(where(is.logical)))
+df %>%
+  mutate(Boolean_TFT = rep(c(TRUE, FALSE, TRUE), length.out = nrow(df)),
+         Boolean_TF = rep(c(TRUE, FALSE), length.out = nrow(df)), .before = "Invoice") %>%
+  filter(if_all(where(is.logical)))
+```
+
+## - *if_any() & if_all() with mutate() or summarise()*
+
+`if_any()` and `if_all()` can be used in `mutate()` or `summarise()` calls as well, as long as we exploit their property of returning logical vectors.
+
+```{r}
+df %>%
+  mutate(High = case_when(Quantity > 50 & Price > 50  ~ "volume_and_price",
+                          Quantity > 50 | Price > 50  ~ "volume_or_price",
+                          Quantity < 50 & Price < 50  ~ "neither"), .keep = "used")
+df %>%
+  mutate(High = case_when(if_all(c(Quantity, Price), ~ .x > 50) ~ "volume_and_price",
+                          if_any(c(Quantity, Price), ~ .x > 50) ~ "volume_or_price",
+                          if_all(c(Quantity, Price), ~ .x <= 50) ~ "neither"))
+```

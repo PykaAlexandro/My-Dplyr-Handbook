@@ -1,0 +1,86 @@
+name: "disclaimer"
+title: "My dplyr handbook"
+type: inverse
+left:
+  - text: "Rows manipulation"
+    menu:
+       - text: "filter()"
+         href: ./filter.html
+       - text: "arrange()"
+         href: ./arrange.html
+       - text: "slice()"
+         href: ./slice.html
+  - text: "Columns manipulation"
+    menu:
+       - text: "select(), rename() & relocate()"
+         href: ./select_rename_relocate.html
+       - text: "mutate()"
+         href: ./mutate.html
+  - text: "Grouping operations"
+    menu:
+       - text: "group_by() / .by"
+         href: ./group_by_by.html
+       - text: "grouped data frames utility functions"
+         href: ./grouped_data_frames_utility_functions.html
+       - text: "summarise() & reframe()"
+         href: ./summarise_reframe.html
+       - text: "count()"
+         href: ./count.html
+       - text: "tally()"
+         href: ./tally.html
+  - text: "Window functions"
+    menu:
+       - text: "introduction, ranking & ordering functions"
+         href: ./ranking_and_ordering_functions.html
+       - text: "offset functions"
+         href: ./offset_functions.html
+       - text: "cumulative aggregates"
+         href: ./cumulative_aggregates.html
+  - text: "across(), rowwise() & nest_by()"
+    menu:
+       - text: "across() & pick()"
+         href: ./across_pick.html
+       - text: "rowwise()"
+         href: ./rowwise.html
+       - text: "nest_by()"
+         href: ./nest_by.html
+  - text: "distinct(), pull(), glimpse() & consecutive_id()"
+    menu:
+       - text: "distinct()"
+         href: ./distinct.html
+       - text: "pull()"
+         href: ./pull.html
+       - text: "glimpse()"
+         href: ./glimpse.html
+       - text: "consecutive_id()"
+         href: ./consecutive_id.html
+  - text: "if_else(), case_when, case_match(), coalesce() & na_if()"
+    menu:
+       - text: "if_else()"
+         href: ./if_else.html
+       - text: "case_when & case_match()"
+         href: ./case_when_case_match.html
+       - text: "coalesce()"
+         href: ./coalesce.html
+       - text: "na_if()"
+         href: ./na_if.html
+  - text: "Two tables verbs"
+    menu:
+       - text: "bind_rows() & bind_cols()"
+         href: ./bind.html
+       - text: "rows_*()"
+         href: ./rows.html
+       - text: "set operations"
+         href: ./set_operations.html
+  - text: "Addendum"
+    menu:
+       - text: "tidy-select & data-masking"
+         href: ./tidy-select_data-masking.html
+       - text: "magrittr's operators"
+         href: ./magrittr_operators.html
+       - text: "rows' order of grouped_dfs"
+         href: ./rows_order_of_grouped_dfs.html
+       - text: "any(), all() & their variants"
+         href: ./any_all_variants.html
+       - text: "dealing with NAs"
+         href: ./dealing_with_NAs.html

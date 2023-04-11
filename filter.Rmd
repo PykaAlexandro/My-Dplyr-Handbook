@@ -1,0 +1,969 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+data-masking
+
+# - *fundamentals*
+
+`filter()` preserves the rows where the values of the columns specified in it evaluate to TRUE when tested on a condition.
+
+In this example for instance we preserve only the rows where the values of the `Country` column coincide with United Kingdom.
+
+```{r} 
+df %>%
+  filter(Country == "United Kingdom")
+```
+
+We can see it as if there was a logical column, with TRUE for the rows with United Kingdom and FALSE for the others,
+
+```{r}
+df %>%
+  mutate(United_Kingdom = if_else(Country == "United Kingdom", TRUE, FALSE))
+```
+
+that `filter()` uses to preserve the rows we are interested in.
+
+```{r}
+df %>%
+  mutate(United_Kingdom = if_else(Country == "United Kingdom", TRUE, FALSE)) %>%
+  filter(United_Kingdom)
+```
+
+Besides TRUE or FALSE, a test can also return NA.
+
+```{r, df_print = "paged"}
+c(NA, 17968, 14553) == 17968
+```
+
+`filter()` treats NAs like FALSE, removing the rows.
+
+```{r}
+df %>%
+  filter(StockCode == "10123G")
+df %>%
+  filter(StockCode == "10123G") %>%
+  filter(`Customer ID` == 17968)
+```
+
+On this topic we remind that NA always returns NA, also in this occasion:
+
+```{r, df_print = "paged"}
+NA == NA
+```
+
+Beside strings and logical columns, we can also use `filter()` on numerical ones.
+
+```{r}
+df %>%
+  filter(Quantity < 10)
+```
+
+And on date and time ones, although here we need to be more careful and take into consideration also the time zone, which can be different from our locale.
+
+```{r}
+df %>%
+  filter(InvoiceDate > "2010-04-01 07:49:00")
+df %>%
+  filter(InvoiceDate > as.POSIXct('2010-04-01 07:49:00', tz = 'UTC'))
+df %>%
+  filter(InvoiceDate == "2010-04-01 07:49:00")
+df %>% 
+  filter(InvoiceDate == as.POSIXct('2010-04-01 07:49:00', tz = 'UTC'))
+```
+
+With only dates this precaution is not necessary.
+
+```{r}
+df %>%
+  mutate(InvoiceDay = as.Date(InvoiceDate)) %>%
+  filter(InvoiceDay > "2010-04-01")
+df %>%
+  mutate(InvoiceDay = as.Date(InvoiceDate)) %>%
+  filter(InvoiceDay == "2010-04-01")
+```
+
+As `filter()` is a data-masking function, we can use it directly with expressions, eliminating the prior `mutate()` call.
+
+```{r}
+df %>%
+  filter(as.Date(InvoiceDate) == "2010-04-01")
+```
+
+`filter()` accepts all kinds of expressions that return logical vectors, for example the ones that do matchmaking on strings.
+
+```{r}
+df %>%
+  filter(stringr::str_detect(Country, "I"))
+```
+
+# - *between()*
+
+`between()` is an useful helper to select rows within a range.
+Notice how it evaluates to <= / >= and not to < / >.
+
+```{r}
+df %>% 
+  filter(between(Quantity, 10, 20))
+df %>%
+  filter(Quantity >= 10) %>%
+  filter(Quantity <= 20)
+```
+
+The values we provide for each "side" can be more than one, with the first value (10 here) that will be used on the first row index and the following on the next one.
+
+```{r}
+df %>% 
+  slice(1:2)
+df %>% 
+  slice(1:2) %>%
+  filter(between(Quantity, c(10, 15), 20))
+```
+
+They are not recycled so their number must be of the same size of the column.
+
+```{r, error = TRUE}
+df %>% 
+  slice(1:10)
+df %>% 
+  slice(1:10) %>%
+  filter(between(Quantity, c(10, 15), 20))
+```
+
+`between()` works with other classes, like character and date, as well.
+
+```{r}
+df %>%
+  filter(between(Country, "France", "Italy"))
+df %>%
+  mutate(InvoiceDay = as.Date(InvoiceDate)) %>%
+  filter(between(InvoiceDay, as.Date("2009-12-01"), as.Date("2009-12-03")))
+```
+
+# - *near()*
+
+With `near()`, that accepts only numerical columns instead, we can filter using a tolerance.
+
+```{r}
+df %>%
+  slice(1:4)
+df %>%
+  slice(1:4) %>%
+  filter(near(Price, 6, tol = 1))
+```
+
+We can use one value or a vector of several.
+
+```{r}
+df %>%
+  slice(1:4) %>%
+  filter(near(Price, c(6, 6, 6, 2), tol = 1))
+```
+
+In the latter case the values will be recycled if the vector is shorter.
+
+```{r}
+df %>%
+  slice(1:4) %>%
+  filter(near(Price, c(6, 6), tol = 1))
+```
+
+But with a warning if its size is not a divisor of the size of the data frame.
+
+```{r}
+df %>%
+  slice(1:4) %>%
+  filter(near(Price, c(6, 6, 6), tol = 1))
+```
+
+And with an error if it is longer.
+
+```{r, error = TRUE}
+df %>%
+  slice(1:4) %>%
+  filter(near(Price, c(6, 6, 6, 2, 6, 6, 6, 2), tol = 1))
+```
+
+Differently from `between()`, `near()` uses < / >.
+
+```{r}
+df %>%
+  filter(Invoice == "491958")
+df %>%
+  filter(Invoice == "491958") %>%
+  filter(near(Price, 6, tol = 1))
+df %>%
+  filter(Invoice == "491958") %>%  
+  filter(Price > 5) %>%
+  filter(Price < 7)
+df %>%
+  filter(Invoice == "491958") %>%  
+  filter(between(Price, 5, 7))
+```
+
+We can use `near()` to preserve rows with a specific decimal value (36 in this example), regardless if the number is positive or negative.
+
+```{r}
+df %>%
+  mutate(Abs_Price = abs(Price)) %>%
+  filter(near(Abs_Price - floor(Abs_Price), 0.36))
+```
+
+# - *multiple filters*
+
+If we use the logical operators `&` (for AND) and `|` (for OR), we can chain more tests, to filter for more values on the same column.
+
+```{r}
+df %>%
+  filter(Price > 5 &
+           Price < 7)
+df %>%
+  filter(Price > 5 |
+           Price < 7)
+```
+
+Or on the values of different columns in the same `filter()` call.
+
+```{r}
+df %>%
+  filter(Country == "United Kingdom" &
+           StockCode ==  22024)
+df %>%
+  filter(Country == "United Kingdom" |
+           StockCode ==  22024)
+```
+
+## -*with & (AND)*
+
+We remind the rules for AND, where we need both tests to evaluate to TRUE to return TRUE.
+
+```{r, eval = FALSE, df_print = "paged"}
+TRUE & TRUE = TRUE
+TRUE & FALSE = FALSE
+```
+
+With the use of the `&` operator then (or even just a comma) we will preserve the rows that satisfy both conditions at the same time (that return TRUE for both of the tests).
+
+```{r}
+df %>% 
+  filter(Quantity < 10 &
+           Price > 5)
+df %>% 
+  filter(Quantity < 10,
+         Price > 5)
+```
+
+As before, we can create logical columns to better show how it works.
+
+```{r}
+df %>%
+  mutate(Quantity_less_10 = if_else(Quantity < 10, TRUE, FALSE),
+         Price_greater_5 = if_else(Price > 5, TRUE, FALSE), .keep = "used")
+df %>%
+  mutate(Quantity_less_10 = if_else(Quantity < 10, TRUE, FALSE),
+         Price_greater_5 = if_else(Price > 5, TRUE, FALSE), .keep = "used") %>%
+  filter(Quantity_less_10 &
+           Price_greater_5)
+```
+
+With `&` we are more precise and less inclusive in our filtering: here we only preserve rows that have both `Quantity` less than 10 AND `Price` higher than 5.
+
+Using `&` is equivalent to chaining two `filter()` calls.
+
+```{r}
+df %>%
+  filter(Quantity >= 10) %>%
+  filter(Quantity <= 20)
+df %>%
+  filter(Quantity >= 10 &
+           Quantity <= 20)
+```
+
+## -*with | (OR)*
+
+With OR instead just one TRUE is enough to return TRUE.
+
+```{r, eval = FALSE, df_print = "paged"}
+TRUE | TRUE = TRUE
+TRUE | FALSE = TRUE
+```
+
+With the `|` operator therefore we will preserve rows that satisfy at least one condition, that return TRUE for just one of the two tests. 
+
+```{r}
+df %>% 
+  filter(Quantity < 10 |
+           Price > 5)
+```
+
+We replicate the example with logical columns for a better understanding.
+
+```{r}
+df %>%
+  mutate(Quantity_less_10 = if_else(Quantity < 10, TRUE, FALSE),
+         Price_greater_5 = if_else(Price > 5, TRUE, FALSE), .keep = "used")
+df %>%
+  mutate(Quantity_less_10 = if_else(Quantity < 10, TRUE, FALSE),
+         Price_greater_5 = if_else(Price > 5, TRUE, FALSE), .keep = "used") %>%
+  filter(Quantity_less_10 |
+           Price_greater_5)
+```
+
+We are more inclusive with OR, as we also get rows that have `Quantity` bigger than 10 and rows that have `Price` lower than 5. 
+
+But we exclude rows that return FALSE for both of the tests, so no rows with `Quantity` bigger than 10 and `Price` lower than 5.
+
+It's like we merge the results of the two different tests, so we could say we have three different sets of rows here:   
+- one group with `Quantity` less than 10 and `Price` lower or equal to 5 (the complement of the second condition)  
+this group satisfies the first condition but not the second  
+- another group with `Quantity` more or equal to 10 (the complement of the first condition) and `Price` higher than 5  
+this group satisfies the second condition but not the first  
+- a third group of rows that satisfies both conditions at once.
+
+```{r}
+df %>%
+  filter(Quantity < 10 &
+           Price <= 5) %>%
+  bind_rows(df %>%
+              filter(Quantity >= 10 & 
+                       Price > 5)) %>%
+  bind_rows(df %>%
+              filter(Quantity < 10 &
+                       Price > 5))
+```
+
+## -*with ! (NOT)*
+
+To specify the complement of a set we can use the NOT (`!`) operator, instead of inverting the signs, that can be more practical in certain situations.
+
+```{r}
+df %>%
+  filter(Quantity < 10 &
+           !Price > 5) %>%
+  bind_rows(df %>%
+              filter(!Quantity < 10 & 
+                       Price > 5)) %>%
+  bind_rows(df %>%
+              filter(Quantity < 10 &
+                       Price > 5))
+```
+
+If there are two conflicting conditions, when the two sets are disjoint and have no elements in common, AND will return 0 rows where OR will return two sets, one for each condition.
+
+```{r}
+df %>%
+  filter(Quantity < 10 &
+           Quantity > 20)
+df %>%
+  filter(Quantity < 10 |
+           Quantity > 20)
+```
+
+# - *Boolean Algebra*
+
+Is it possible to construct more articulate expressions remembering that, in Boolean algebra, the order of operations from highest to lowest priority is NOT, then AND, then OR.
+
+So if we want for example `Quantity` below a certain value and two disjoint sets of prices, we must wrap the OR condition with parentheses for it to be evaluated before AND.
+
+```{r}
+df %>%
+  filter(Quantity < 10 &
+           (Price > 7 |
+              Price < 3))
+```
+
+Without parentheses AND will be evaluated first, so we would preserve rows with either `Quantity` less than 10 and `Price` higher than 7 or with a `Price` lower than 3 (and whatever `Quantity`).
+
+```{r}
+df %>%
+  filter(Quantity < 10 &
+           Price > 7 |
+           Price < 3)
+```
+
+We can use parentheses, even if they are not necessary, to make the example more intelligible.
+Notice how the indentation changed as well.
+
+```{r}
+df %>%
+  filter((Quantity < 10 &
+            Price > 7) |
+           Price < 3)
+```
+
+If we swapped `&` and `|` instead, it would be as we only filtered for `Quantity` as the `Price` conditions with an AND are contradictory and return 0 rows.
+
+```{r}
+df %>%
+  filter(Quantity < 10 |
+           Price > 7 &
+           Price < 3)
+df %>%
+  filter(Quantity < 10)
+```
+
+If we invert the signs of the `Price` conditions to have a meaningful interval we have an example where, as AND is evaluated first, we will preserve rows where either `Quantity` is less than 10 or `Price` is between 3 and 7.
+
+```{r}
+df %>%
+  filter(Quantity < 10 |
+           Price < 7 &
+           Price > 3)
+```
+
+NOT has the highest priority so, as seen before, when it is used AND and OR evaluate on the complements of sets.
+
+```{r}
+df %>%
+  filter(Price < 7 &
+           Price > 3 |
+           !Quantity >= 10)
+```
+
+This last example is equivalent to the following one, as the order of the conditions doesn't influence the priority.
+
+```{r}
+df %>%
+  filter(!Quantity >= 10 |
+           Price < 7 &
+           Price > 3)
+```
+
+# - *missing values*
+
+If we have missing values (NAs) we will use the `is.na()` function to either preserve or remove the rows containing them.
+
+The most common case is to remove them, and to do so we will negate the function, as this expression will keep rows that return TRUE to the test IS NOT NA for the values of the column specified within.
+
+```{r}
+df %>%
+  filter(!is.na(`Customer ID`))
+```
+
+In case we want to preserve the rows with NAs, we remove the negation.
+
+```{r}
+df %>%
+  filter(is.na(`Customer ID`))
+```
+
+With more than one column, we can preserve rows with NAs in all of them with `&`.
+
+```{r}
+df %>%
+  filter(is.na(`Customer ID`) &
+           is.na(Description))
+```
+
+And in either just one of them with |.
+
+```{r}
+df %>%
+  filter(is.na(`Customer ID`) | 
+           is.na(Description))
+```
+
+We can mix negated and not negated expressions, and the result will vary in regards to the distribution of NAs.
+
+```{r}
+df %>%
+  filter(!is.na(`Customer ID`) &
+           is.na(Description))
+df %>%
+  filter(!is.na(`Customer ID`) |
+           is.na(Description))
+df %>%
+  filter(is.na(`Customer ID`) &
+           !is.na(Description))
+df %>%
+  filter(is.na(`Customer ID`) |
+           !is.na(Description))
+```
+
+We apply two negations to preserve rows without NAs in both
+
+```{r}
+df %>%
+  filter(!is.na(`Customer ID`) &
+           !is.na(Description))
+```
+
+or in at least one of the columns.
+
+```{r}
+df %>%
+  filter(!is.na(`Customer ID`) |
+           !is.na(Description))
+```
+
+## - *De Morgan's Laws*
+
+The last two examples can be rewritten like this,
+
+```{r}
+df %>%
+  filter(!(is.na(`Customer ID`) |
+           is.na(Description)))
+df %>%
+  filter(!(is.na(`Customer ID`) &
+            is.na(Description)))
+```
+
+if we apply the De Morgan's Laws.
+
+```{r, eval = FALSE, df_print = "paged"}
+!(x & y) = !x | !y
+!(x | y) = !x & !y
+```
+
+The De Morgan’s laws can be used to simplify or to make more intelligible complex expressions, taking as well advantage of the complements of sets.
+
+```{r}
+df %>%
+  filter(!(Price <= 3 |
+             Price >= 7))
+df %>%
+  filter(!Price <= 3 &
+           !Price >= 7)
+df %>%
+  filter(Price > 3 &
+           Price < 7)
+```
+
+# - *external filters*
+
+Using a certain syntax (that stems from the `rlang` package, that is loaded together with `dplyr`) we can store conditions as external variables and then use them in a `filter()` call with the `!!!` notation.
+
+```{r, df_print = "paged"}
+Price_greater_3 <- quo(Price > 3)
+Price_less_7 <- quo(Price < 7)
+```
+```{r}
+df %>%
+  filter(!!Price_greater_3 &
+           !!Price_less_7)
+```
+
+Or even store all the tests as an external variable.
+
+```{r, df_print = "paged"}
+filter_test <- quo(Price > 3 &
+                     Price < 7)
+```
+```{r}
+df %>%
+  filter(!!filter_test)
+```
+
+# - *%in%*
+
+Two other operators are `%in%` and `xor()`.
+
+`%in%` returns a logical vector with as many elements as the vector on its left (`df$Country` in our case).
+
+```{r, df_print = "paged"}
+head(df$Country %in% c("Italy", "France", "Germany"), 100)
+```
+
+We will get TRUE for the positions where `df$Country` has a value equal to the elements present in the vector on its right `(c("Italy", "France", "Germany"))` and FALSE otherwise.
+
+`filter()` can then use that logical vector to preserve the rows whose values equate to the ones in the vector, effectively shortening long chains of OR conditions.
+
+```{r}
+df %>%
+  filter(Country == "Italy" |
+           Country == "France" |
+           Country == "Germany")
+df %>%
+  filter(Country %in% c("Italy", "France", "Germany"))
+```
+
+With `filter()`, the order of the two components of `%in%` is important, as its output must have the same length as df.
+
+```{r, error = TRUE, df_print = "paged"}
+c("Italy", "France", "Germany") %in% df$Country
+df %>%
+  filter(c("Italy", "France", "Germany") %in% Country)
+```
+
+Take notice that `%in%` by default returns FALSE for NAs whereas `==` returns NA.
+
+```{r, df_print = "paged"}
+c(NA, 17968, 14553) %in% 17968
+c(NA, 17968, 14553) == 17968
+```
+
+However, as `filter()` only preserves rows that return TRUE, this is not a problem.
+
+```{r}
+df %>%
+  filter(StockCode == "10123G")
+df %>%
+  filter(StockCode == "10123G") %>%
+  filter(`Customer ID` == 17968)
+df %>%
+  filter(StockCode == "10123G") %>%
+  filter(`Customer ID` %in% 17968)
+```
+
+# - *xor()*
+
+`xor()`, called exclusive OR, is related to `|` (OR) and it is used when we don't want to preserve the rows that satisfy both conditions (`xor()` only accepts two arguments), eliminating de facto the overlap and returning two distinct sets in which only one condition is satisfied.  
+In set theory this is called a symmetric difference.
+
+```{r}
+df %>% 
+  filter(Quantity < 10 |
+         Price > 5)
+df %>%
+  filter(xor(Quantity < 10,
+             Price > 5))
+```
+
+In case there are no elements that satisfy both conditions at once, the use of `xor()` is therefore superfluous.
+
+```{r}
+df %>%
+  filter(Quantity < 10 |
+           Quantity > 20)
+df %>%
+  filter(xor(Quantity < 10,
+             Quantity > 20))
+```
+
+# - *inline subsetting*
+
+Lastly, we can use inline subsetting to better refine our filter, like here where the average `Price` we filter on is calculated only on items with a positive `Quantity` value.
+
+```{r}
+df %>%
+  filter(Price > mean(Price[Quantity > 0]))
+```
+
+# - *with group_by() / .by*
+
+We can filter on grouped data frames by using a `group_by()` call beforehand or by using the `.by` argument.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(Quantity > mean(Quantity))
+df %>%
+  filter(Quantity > mean(Quantity), .by = Country)
+```
+
+One difference is that `.by` leaves the data frame ungrouped.
+
+And another is that with more than one column to group by their syntax is different (`group_by()` uses data-masking, while `.by` tidy-select), with `.by` needing a `c()`.
+
+```{r}
+df %>%
+  group_by(Country, `Customer ID`) %>%
+  filter(Quantity > mean(Quantity))
+df %>%
+  filter(Quantity > mean(Quantity), .by = c(Country, `Customer ID`))
+```
+
+With a grouped data frame `filter()` will possibly use a condition specific to each group, like in the following example where the mean of `Quantity` is calculated separately for every `Country`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarize(Avg_Quantity_per_Country = mean(Quantity))
+```
+
+and, as each mean can be very different from the global one,
+
+```{r}
+df %>%
+  summarize(Quantity_mean = mean(Quantity))
+```
+
+this greatly changes the output, so it is advised to always be aware on whether our data frame is grouped or not.
+
+```{r}
+df %>%
+  filter(Quantity > mean(Quantity))
+```
+
+It is like we filter by a new column we built beforehand.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Country_Specific_Avg_Quantity = mean(Quantity), .keep = "used") %>%
+  ungroup() %>%
+  filter(Quantity > Country_Specific_Avg_Quantity)
+```
+
+In case we have a grouped data frame but we still want to filter by the overall mean, we can supply a vector to the mean function or directly a scalar with the global mean value, as these kind of operations are not influenced by a grouped data frame because the value we filter on does not change between groups.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(Quantity > mean(df$Quantity))
+df %>%
+  group_by(Country) %>%
+  filter(Quantity > 10.33767)
+```
+
+For this reason also the previous example, where we filtered by `Country_Specific_Avg_Quantity`, doesn't change its output when the data frame is grouped.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Country_Specific_Avg_Quantity = mean(Quantity)) %>%
+  filter(Quantity > Country_Specific_Avg_Quantity)
+```
+
+## - *with n()*
+
+Using `n()` we can filter by the number of rows every group has, keeping only the groups that satisfy the condition.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(n() > 100)
+df %>%
+  group_by(Country) %>%
+  filter(n() == 77)
+```
+
+## - *.preserve*
+
+It can happen that a `filter()` call might exclude a group, like here with the Lebanon one that has only 13 rows.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(row_number() == 15)
+```
+
+if this is against our wishes, we can set the `.preserve` argument to TRUE, in a way that that group is still present even if it is of size 0.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(row_number() == 15, .preserve = TRUE)
+```
+
+This could be useful for further operations down the pipe.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  filter(row_number() == 15, .preserve = TRUE) %>%
+  summarize(n = n())
+```
+
+## - *any() & all()*
+
+Two other functions we can use with `group_by()` are `any()` and `all()`, both of which evaluate logical vectors returning one single value as output.
+
+If any of the elements of the vector is TRUE, `any()` returns TRUE.
+
+```{r, df_print = "paged"}
+(x <- c(1, 2, 3))
+x > 2
+any(x > 2)
+```
+
+If none is, it returns FALSE.
+ 
+```{r, df_print = "paged"}
+x > 3
+any(x > 3)
+```
+
+If all the elements are TRUE, `all()` returns TRUE,
+
+```{r, df_print = "paged"}
+x > 0
+all(x > 0)
+```
+
+and if there is just one FALSE, it returns FALSE.
+
+```{r, df_print = "paged"}
+x > 1
+all(x > 1)
+```
+
+It is like `any()` chains many OR expressions.
+
+```{r, df_print = "paged"}
+any(x > 2)
+1 > 2 | 2 > 2 | 3 > 2
+any(x > 3)
+1 > 3 | 2 > 3 | 3 > 3
+```
+
+while `all()` many AND expressions.
+
+```{r, df_print = "paged"}
+all(x > 0)
+1 > 0 & 2 > 0 & 3 > 0
+all(x > 1)
+1 > 1 & 2 > 1 & 3 > 1
+```
+
+These two functions are useful in `filter()` calls on grouped data frames to preserve the rows of groups that either at times or all the times satisfy a condition.
+
+For example we might want to use `any()` to preserve the stock codes that had a negative value in the `Quantity` column at least once.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  filter(any(Quantity < 0))
+```
+
+So, for every stock code, if there is at least one row with `Quantity < 0` (which will therefore return TRUE), all that stock code's rows will be preserved, even if the other values in the `Quantity` column are positive.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  filter(any(Quantity < 0)) %>%  
+  filter(StockCode == "85048") %>%
+  select(StockCode, Quantity)
+```
+
+With `all()` instead we would preserve the stock codes that always had negative values, as all of their rows will return TRUE.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  filter(all(Quantity < 0))
+df %>%
+  group_by(StockCode) %>%
+  filter(all(Quantity < 0)) %>%
+  ungroup() %>%
+  summarise(`# of StockCodes` = n_distinct(StockCode),
+            `% of StockCodes with Negative Quantities` = formattable::percent(mean(Quantity < 0)))
+```
+
+Without `any()` or `all()` we will just preserve the rows with a negative `Quantity`, without exploiting the properties of a grouped data frame.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  filter(Quantity < 0)
+```
+
+By the way, as seen before, filtering on `Quantity < 0` yields the same results with either a grouped or an ungrouped data frame, as the quantity we filter on (`0`) is not dependent on the grouping.
+
+```{r}
+df %>%
+  filter(Quantity < 0)
+```
+
+Another example could be when we use an aggregate function like `mean()`.
+
+Here for instance we preserve the stock codes that had at least once a `Price` higher than the mean of their prices.
+
+```{r}
+df %>%
+  group_by(StockCode) %>%
+  filter(any(Price > mean(Price)))
+```
+
+We remind the outputs of the interactions between NAs and the logical constants TRUE and FALSE in OR statements.
+
+```{r, df_print = "paged"}
+NA | TRUE 
+NA | FALSE
+```
+
+Because the vectors we evaluate can sometimes have NAs,
+
+```{r, df_print = "paged"}
+(xNA <- c(1, 2, 3, NA))
+xNA > 3
+```
+
+so in case we apply `any()` on a vector with FALSEs and NAs we can get an NA instead of FALSE.
+
+```{r, df_print = "paged"}
+any(xNA > 3)
+```
+
+To prevent that we can use the `na.rm` argument, even if `filter()` treats NAs as FALSE so that should not constitute a problem.
+
+```{r, df_print = "paged"}
+any(xNA > 3, na.rm = TRUE)
+```
+
+With `all()` instead, an NA could prevent it to output TRUE.
+
+```{r, df_print = "paged"}
+NA & TRUE
+NA & FALSE
+xNA > 0
+all(xNA > 0)
+```
+
+So here the `na.rm` argument becomes necessary.
+
+```{r, df_print = "paged"}
+all(xNA > 0, na.rm = TRUE)
+```

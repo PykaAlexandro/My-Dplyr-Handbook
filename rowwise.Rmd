@@ -1,0 +1,373 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged_rowwise")
+```
+
+```{r, echo=FALSE}
+is_rowwise_df <- function(x) {
+  inherits(x, "rowwise_df")
+}
+info_paged_rowwise_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  rowwise_info <- paste0("<div class=\"group-info\">Rowwise: ", 
+                      paste0(group_vars(x), collapse = ", "), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (is_rowwise_df(x)) { 
+    tab_info_rowwise <- paste0("<div class=\"info\">", tibble_info, " ", rowwise_info, "</div>")
+    cat(tab_info_rowwise)
+  } else if (dplyr::is_grouped_df(x)){
+    tab_info_grouped <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info_grouped)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))    
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged_rowwise") {
+    options$render = info_paged_rowwise_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+tidy-select
+
+# - *fundamentals*
+
+With `group_by()` we can group together several rows by the different unique values of a column. If we apply a manipulation we then get results that are specific to each group.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(Avg_Price = mean(Price))
+```
+
+`rowwise()` instead creates groups composed of one single row. 
+
+```{r}
+df %>%
+  rowwise()
+```
+
+This permits to apply aggregate functions, inside a `mutate()` or `summarise()` call, to values placed on different columns but on the same row.
+
+```{r}
+df %>%
+  rowwise() %>%
+  mutate(Quantity_Price_Avg = mean(c(Quantity, Price)), .keep = "used")
+```
+
+Without `rowwise()` `R` would use at once all the values in the `Quantity` and `Price` columns to calculate the mean, thus returning the same output for all the rows and not row specific averages like above.
+
+```{r}
+df %>%
+  mutate(Quantity_Price_Avg = mean(c(Quantity, Price)), .keep = "used")
+```
+
+`rowwise()` is not needed though when we use arithmetic operators, as they are vectorized.
+
+```{r}
+df %>%
+  rowwise() %>%
+  mutate(Total_Expense = Quantity * Price, .keep = "used")
+df %>%
+  mutate(Total_Expense = Quantity * Price, .keep = "used")
+df %>%
+  rowwise() %>%
+  mutate(Quantity_plus_Price = Quantity + Price, .keep = "used")
+df %>%
+  mutate(Quantity_plus_Price = Quantity + Price, .keep = "used")
+```
+
+# - *c_across()*
+
+tidy-select
+
+In case we need to select several columns, we can use `c_across()`, which we can say it is a `c()` specific to `rowwise()` that employs tidy-select syntax.
+
+```{r}
+df %>%
+  slice(1:1000) %>%
+  rowwise() %>%
+  mutate(Sums_Numeric = sum(c_across(where(is.numeric))), .keep = "used")
+```
+
+For more complicated expressions beware that we still need to concatenate with `c()`.
+
+```{r}
+df %>%
+  slice(1:1000) %>%
+  rowwise() %>%
+  mutate(Quantity_plus_Price = sum(c_across(c(where(is.numeric), -`Customer ID`))), .keep = "used")
+```
+
+Otherwise we will get an error.
+
+```{r, error = TRUE}
+df %>%
+  slice(1:1000) %>%
+  rowwise() %>%
+  mutate(Quantity_plus_Price = sum(c_across(where(is.numeric), -`Customer ID`)))
+```
+
+Just like with `across()`, with which you might associate `c_across()` with but the way you use them is very different as is their output (`across()` applies the same manipulation to all the values of several columns).
+
+```{r, error = TRUE}
+df %>%
+  mutate(across(c(where(is.numeric), -`Customer ID`), sum), .keep = "used")
+df %>%
+  mutate(across(where(is.numeric), -`Customer ID`), sum)
+```
+
+Another key difference is that `c_across()` returns vectors while `across()` a data frame.
+
+```{r}
+df %>%
+  mutate(Quantity_plus_Price = across(c(where(is.numeric), -`Customer ID`), sum), .keep = "used")
+```
+
+# - *using dedicated functions instead*
+
+In some of the examples I had to select the first 1000 rows with `slice()`; that is because `rowwise()` is not particularly fast, so, if applicable, it's better to use already existing `R` rows based functions like `rowSums()` and `rowMeans()`.
+
+`rowSums()` and `rowMeans()` take a data frame as the input, so we need to use `across()`, or even better `pick()`, as well.
+
+```{r}
+df %>%
+  rowwise() %>%
+  mutate(Quantity_plus_Price = sum(c(Quantity, Price)), .keep = "used")
+df %>%
+  mutate(Quantity_plus_Price = rowSums(across(c(Quantity, Price))), .keep = "used")
+df %>%
+  mutate(Quantity_plus_Price = rowSums(pick(Quantity, Price)), .keep = "used")
+```
+
+Likewise if we want to find the minimum value of several columns we can opt for `pmin()`.
+This function doesn't need `across()` or `pick()` as it takes vectors as inputs.
+
+```{r}
+df %>%
+  rowwise() %>%
+  mutate(Lowest_Value = min(c(Quantity, Price)), .keep = "used")
+df %>%
+  mutate(Lowest_Value = pmin(Quantity, Price), .keep = "used")
+```
+
+# - *ungrouped or grouped output*
+
+If we apply `summarise()` to a rowwise data frame, the output will not be grouped.
+
+```{r}
+df %>%
+  rowwise() %>%
+  mutate(Quantity_plus_Price = sum(c(Quantity, Price)), .keep = "used")
+df %>%
+  rowwise() %>%
+  summarise(Quantity_plus_Price = sum(c(Quantity, Price)))
+```
+
+Similarly to what happens with `group_by()` when only one column is used.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Quantity_plus_Price = sum(c(Quantity, Price)), .keep = "used")
+df %>%
+  group_by(Country) %>%
+  summarise(Quantity_plus_Price = sum(c(Quantity, Price)))
+```
+
+Unlike `group_by()` though, even with `.groups = "keep"`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  summarise(Quantity_plus_Price = sum(c(Quantity, Price)), .groups = "keep")
+df %>%
+  rowwise() %>%
+  summarise(Quantity_plus_Price = sum(c(Quantity, Price)), .groups = "keep")
+```
+
+The general good practice of piping an additional `ungroup()` is recommended then when not using `summarise()`.
+
+```{r}
+df %>%
+  rowwise() %>%
+  mutate(Quantity_plus_Price = sum(c(Quantity, Price))) %>%
+  ungroup()
+```
+
+# - *columns as arguments*
+
+`rowwise()` can take one or several columns as arguments, with a tidy-select syntax.
+
+```{r}
+df %>%
+  rowwise(`Customer ID`)
+df %>%
+  rowwise(7, Invoice)
+df %>%
+  rowwise(where(is.numeric))
+```
+
+When specified, after a `summarise()` call they will be kept and used as `group_by()` grouping columns (differently from `group_by()` the output is not ordered by them though).
+
+```{r}
+df %>%
+  rowwise(`Customer ID`) %>%
+  summarise(Quantity_plus_Price = sum(c(Quantity, Price)))
+df %>%
+  rowwise(`Customer ID`, Invoice) %>%
+  summarise(Quantity_plus_Price = sum(c(Quantity, Price)))
+```
+
+This can be useful for piping additional manipulations that require a grouped data frame (notice how here the output is ordered by the grouping column instead).
+
+```{r}
+df %>%
+  rowwise(`Customer ID`) %>%
+  summarise(Quantity_plus_Price = sum(c(Quantity, Price))) %>%
+  summarise(Avg_Quantity_plus_Price_per_Customer = mean(Quantity_plus_Price))
+```
+
+With `mutate()` instead it keeps the `rowwise()` grouping.
+
+```{r}
+df %>%
+  rowwise(`Customer ID`) %>%
+  mutate(Quantity_plus_Price = sum(c(Quantity, Price)))
+```
+
+If we use `c_across()`, the columns set as arguments of `rowwise()` will not be selected even if they answer to the condition.
+
+```{r}
+df %>%
+  slice(1:1000) %>%
+  rowwise(`Customer ID`) %>%
+  mutate(Sums_Numeric = sum(c_across(where(is.numeric))), .keep = "used")
+df %>%
+  slice(1:1000) %>%
+  rowwise(`Customer ID`) %>%
+  summarise(Sums_Numeric = sum(c_across(where(is.numeric))))
+```
+
+`rowwise()` though doesn't permit to group with expression like `group_by()` (it is not a data-masking function).
+
+```{r, error = TRUE}
+df %>%
+  rowwise(as.character(`Customer ID`)) %>%
+  mutate(Quantity_plus_Price = sum(c(Quantity, Price)))
+```
+
+# - *with multiple outputs functions*
+
+We can provide functions that return more than one value in we wrap them in a list. The values will be returned inside a list-column.
+
+```{r}
+df %>%
+  slice(1:1000) %>%
+  rowwise() %>%
+  mutate(Quantiles = list(quantile(c(Quantity, Price), prob = c(0.25, 0.75))), .keep = "used")
+```
+
+# - *with list-columns*
+
+`rowwise()` can come handy when we have a list-column if we want to access the values inside each of its elements (as each of them is a single row).
+
+```{r}
+df %>%
+  group_nest(Country) %>%
+  rowwise() %>%
+  mutate(N_Rows = nrow(data))
+df %>%
+  group_nest(Country) %>%
+  rowwise() %>%
+  mutate(Avg_Quantity = mean(data$Quantity))
+```
+
+# - *with group_by()*
+
+If we apply `rowwise()` on a grouped data frame, with a `mutate()` call it overrides the grouping inheriting the grouping column.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  rowwise() %>%
+  mutate(Quantity_plus_Price = sum(c(Quantity, Price)), .keep = "used")
+```
+
+With a `summarise()` call it ungroups, performs the `rowwise()` calculations and then regroups the output by the original column.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  rowwise() %>%
+  summarise(Quantity_plus_Price = sum(c(Quantity, Price)))
+```
+
+`rowwise()` doesn't accept arguments in these situations though, returning an error.
+
+```{r, error = TRUE}
+df %>%
+  group_by(Country) %>%
+  rowwise(`Customer ID`) %>%
+  mutate(Quantity_plus_Price = sum(c(Quantity, Price)))
+df %>%
+  group_by(Country) %>%
+  rowwise(`Customer ID`) %>%
+  summarise(Quantity_plus_Price = sum(c(Quantity, Price)))
+```
+
+Even when the argument is the same as the grouping column.
+
+```{r, error = TRUE}
+df %>%
+  group_by(Country) %>%
+  rowwise(Country) %>%
+  mutate(Quantity_plus_Price = sum(c(Quantity, Price)))
+df %>%
+  group_by(Country) %>%
+  rowwise(Country) %>%
+  summarise(Quantity_plus_Price = sum(c(Quantity, Price)))
+```

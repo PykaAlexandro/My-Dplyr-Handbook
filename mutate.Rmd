@@ -1,0 +1,300 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+data-masking
+
+# - *fundamentals*
+
+`mutate()` is used to store the results of various calculation, either into new columns,
+
+```{r}
+df %>%
+  mutate(Price_Eur = Price * 1.14)
+```
+
+or by updating existing ones.
+
+```{r}
+df %>%
+  mutate(Price = Price * 1.14)
+```
+
+The just created columns can be conveniently used again inside the same `mutate()` call.
+
+```{r}
+df %>%
+  mutate(Price_Eur = Price * 1.14,
+         Revenue_Eur = Quantity * Price_Eur)
+```
+
+`mutate()` permits a high degree of columns manipulation and it can be used with a vast variety of functions.
+Here for example we are interested in knowing what is more expensive, the squared or the doubled price, for every item.
+
+```{r}
+df %>%
+  mutate(Squared_Price = Price ^ 2,
+         Double_Price = Price * 2,
+         Max_Price = if_else(pmax(Squared_Price, Double_Price) == Squared_Price, "Squared_Price", "Double_Price"))
+```
+
+In these previous examples we used calculations that are vectorized.
+Vectorized operations are performed element-wise, meaning that the calculation is performed between elements that share the same position/row index and we get a result for every position.
+
+```{r, df_print = "paged"}
+c(1, 2, 3) * c(1, 2, 3)
+```
+
+If one of the two objects is of length 1 its value will be used again (recycled) along the length of the longer one.
+
+```{r, df_print = "paged"}
+c(1, 2, 3) * 2
+2 * c(1, 2, 3)
+```
+
+Recycling takes place also with vectors of different lengths.
+
+```{r, df_print = "paged"}
+c(1, 2, 3, 4) * c(2, 3)
+```
+
+But if the longer vector's length is not a multiple of the smaller one's, R will issue a warning.
+
+```{r, df_print = "paged"}
+c(1, 2, 3) * c(2, 3)
+```
+
+That is something we must take into consideration when using `mutate()`, as it could produce unwanted results.
+
+```{r}
+df %>%
+  mutate(Price_2 = Price * c(1.14, 2))
+```
+
+When we use an aggregate function, like `mean()`, we will get the same result for all the rows,
+
+```{r}
+df %>%
+  mutate(Avg_Price = mean(Price))
+```
+
+and with window functions a result for every row.
+
+```{r}
+df %>%
+  mutate(Price_Rank = dense_rank(desc(Price)))
+```
+
+With `mutate()` we can add new homogeneous columns, where the value specified will be recycled along all the rows.
+
+```{r}
+df %>%
+  mutate(DistributionCentre = "London")
+```
+
+When creating new columns, it is only permitted to recycle vectors of length 1 so trying to add new columns with a length equal to a divisor of the length of the data frame will not work.
+
+```{r, error = TRUE}
+df %>%
+  slice(1:10) %>%
+  mutate(New_Col = c(1, 2))
+```
+
+As the error states, besides of length 1 we can add columns if their length is equal to the length of the data frame.
+
+```{r}
+df %>%
+  slice(1:10) %>%
+  mutate(New_Col = c(1:10))
+```
+
+The recycling behavior seen in these past examples is dictated by the fact that `mutate()` must return the same number of rows as the input.
+
+`mutate()` can be used to remove existing columns as well, with the `NULL` operator:
+
+```{r}
+df %>%
+  mutate(Price = NULL)
+```
+
+# - *.after & .before*
+
+tidy-select
+
+By default `mutate()` places the newly created columns at the end of the data frame, but we can change this behavior using the `.after` and `.before` optional tidy-select arguments.
+
+```{r}
+df %>%
+  mutate(Price_Eur = Price * 1.14, .after = Price)
+df %>%
+  mutate(Price_Eur = Price * 1.14, .before = Price)
+```
+
+In case we have two new columns and we want them in specific positions we have to break down the call in two though.
+
+```{r}
+df %>%
+  mutate(Price_Eur = Price * 1.14,
+         .after = Price) %>%
+  mutate(Revenue_Eur = Quantity * Price_Eur,
+         .after = `Customer ID`)
+```
+
+# - *.keep*
+
+Using the `.keep` argument we have agency on which columns to preserve in the output.
+
+`all`, the default, keeps all the existing columns.
+
+```{r}
+df %>%
+  mutate(Price_Eur = Price * 1.14, .keep = "all")
+```
+
+`used` preserves only the columns used in the `mutate()` call,
+
+```{r}
+df %>%
+  mutate(Price_Eur = Price * 1.14, .keep = "used")
+```
+
+plus the grouping columns, if any.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Eur = Price * 1.14, .keep = "used")
+```
+
+`unused` substitutes the used columns with the newly calculated ones, useful for updating their names and values.
+
+```{r}
+df %>%
+  mutate(Price_Eur = Price * 1.14, .keep = "unused")
+```
+
+`none` keeps only the new columns,
+
+```{r}
+df %>% 
+  mutate(Price_Eur = Price * 1.14, .keep = "none")
+```
+
+plus any grouping columns, if present.
+
+```{r}
+df %>% 
+  group_by(Country) %>%
+  mutate(Price_Eur = Price * 1.14, .keep = "none")
+```
+
+# - *with group_by() / .by*
+
+If we are using aggregate or window functions, a grouped data frame allows `mutate()` to perform group-wise calculations, meaning that only the values pertaining to each group are responsible for that group's output.
+
+The results can greatly differ from when they are performed on an ungrouped data frame.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Avg_Price = mean(Price), .keep = "none")
+df %>%
+  mutate(Avg_Price = mean(Price), .keep = "none")
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Rank = dense_rank(desc(Price)), .keep = "none")
+df %>%
+  mutate(Price_Rank = dense_rank(desc(Price)), .keep = "none")
+```
+
+With element-wise calculations instead the results are the same.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Price_Eur = Price * 1.14, .keep = "none")
+df %>%
+  mutate(Price_Eur = Price * 1.14, .keep = "none")
+```
+
+Instead of using `group_by()` we can specify the `.by` argument to perform operations on grouped data frames.
+
+```{r}
+df %>%
+  mutate(Avg_Price = mean(Price), .by = Country, .keep = "none")
+```
+
+`.by` always leaves the data frame ungrouped, and it needs tidy-select syntax if we want to specify more than one column.
+
+```{r}
+df %>%
+  mutate(Avg_Price = mean(Price), .by = c("Country", "Customer ID"), .keep = "none")
+```
+
+That allows to utilize selection helpers.
+
+```{r}
+df %>%
+  mutate(Avg_Price = mean(Price), .by = starts_with("C"), .keep = "none")
+```

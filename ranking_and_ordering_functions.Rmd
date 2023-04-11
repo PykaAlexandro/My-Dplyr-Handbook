@@ -1,0 +1,621 @@
+---
+title: ""
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, df_print="info_paged")
+```
+
+```{r, echo=FALSE}
+info_paged_print <- function(x, options) {
+  tibble_info <- paste0("<div class=\"tibble-info\">A tibble: ", nrow(x), " x ", ncol(x), "</div>")
+  group_info <- paste0("<div class=\"group-info\">Groups: ", 
+                      paste0(group_vars(x), collapse = ", "), 
+                      " [", nrow(group_keys(x)), "]", "</div>")
+  
+  if (dplyr::is_grouped_df(x)) {
+    tab_info <- paste0("<div class=\"info\">", tibble_info, " ", group_info, "</div>")
+    cat(tab_info)
+  } else {
+    cat(paste0("<div class=\"info\">", tibble_info, "</div>"))
+  }
+  knitr::asis_output(
+    rmarkdown:::paged_table_html(x, options = attr(x, "options")),
+    meta = list(
+      dependencies = rmarkdown:::html_dependency_pagedtable()
+    )
+  )
+}
+
+knitr::opts_hooks$set(df_print = function(options) {
+  if (options$df_print == "info_paged") {
+    options$render = info_paged_print
+    options$comment = ""
+    options$results = "asis"
+  }
+  options
+})
+```
+
+```{css, echo=FALSE}
+.tibble-info,
+.group-info {
+  display: inline-block;
+  padding: 15px;
+}
+
+.info {
+  margin-top: 5px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #999898;
+}
+```
+
+```{r, message = FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+df <- read_excel(here::here("online_retail_II.xlsx"))
+```
+
+# - *window functions' introduction*
+
+An aggregate function, like `mean()`, takes a vector of n elements and returns a single scalar, with the value of this scalar depending on all the values of the input vector.
+
+```{r, df_print = "paged"}
+mean(c(1, 2, 3, 4, 5, 6))
+```
+
+Vectorized functions, like arithmetic operators,  return instead a vector with the same length of the longest one used and for every element of the output its value only depends on the elements directly involved in the operation.
+
+Here for example the summation is performed between elements that share the same position.
+
+```{r, df_print = "paged"}
+c(1, 2, 3, 4, 5, 6) + 
+c(1, 2, 1, 1, 2, 1)
+```
+
+Vectorized functions recycle vectors of minor lengths,
+
+```{r, df_print = "paged"}
+c(1, 2, 3, 4, 5, 6) + 
+c(1, 2, 1)
+```
+
+but if their number of elements is not a divisor of the longer ones' a warning is issued.
+
+```{r, df_print = "paged"}
+c(1, 2, 3, 4, 5, 6) + 
+c(1, 2, 1, 1)
+```
+
+Window functions are a mix between the two as they generally return vectors of the same length as the input one with the values of the output depending on all the values of the input.
+
+```{r, df_print = "paged"}
+row_number(c(1, 2, 3, 4, 5, 6))
+```
+
+There are five families of window functions:
+
+```{r, eval = FALSE, df_print = "paged"}
+ranking and ordering functions
+offset functions
+cumulative aggregate
+rolling aggregates
+recycled aggregates
+```
+
+and in the context of `dplyr` we will discuss the first three.
+
+# - *ranking & ordering functions*
+
+This family consists of 
+
+```{r, eval = FALSE, df_print = "paged"}
+row_number()
+min_rank()
+dense_rank()
+cume_dist()
+percent_rank()
+ntile()
+```
+
+and these functions ranks the elements of a vector by the values of its elements, with the specific that smaller values are ranked higher.
+
+```{r, df_print = "paged"}
+row_number(c(2, 8, 6, 3, 4))
+```
+
+## - *the differences between them*
+
+They differ between themselves by how they resolve possible ties and this dictates the presence of missing or repeated ranks in the output.
+
+`row_number()` uses the position to resolve ties by assigning the higher rank to the element with the lower position, the one that "comes first".
+
+```{r, df_print = "paged"}
+(x <- c(1, 2, 2, 3))
+row_number(x)
+```
+
+With `row_number()` there are no missing or repeated ranks. 
+
+`min_rank` allows for ties and, in case of one, the following element has its rank augmented by the number of elements in the previous tie minus 1, similar to what happens with sports results (if two athletes rank at the second place, the following one is ranked fourth). 
+
+```{r, df_print = "paged"}
+x
+min_rank(x)
+```
+
+There are missing and repeated ranks then.
+
+`dense_rank()` allows for ties but, differently from `min_rank()`, uses all the scale without skipping ranks (the athlete of the previous example would rank third here).
+
+```{r, df_print = "paged"}
+x
+dense_rank(x)
+```
+
+There are no missing ranks but some can be repeated.
+
+`cume_dist()` and `percent_rank()` are different as they don't return an integer but a fraction.
+
+The former returns the relative percentiles of a cumulative distribution, calculated with the following formula:
+
+```{r, eval = FALSE, df_print = "paged"}
+number of elements less or equal to that element / total number of element
+```
+
+It can be seen as the proportion of all values less then or equal to a specific one.
+
+```{r, df_print = "paged"}
+x
+cume_dist(x)
+```
+
+The latter rescales the values between 0 and 1 (included) and the ranks are calculated as
+
+```{r, eval = FALSE, df_print = "paged"}
+the number of elements less than that element / the number of elements except that element
+```
+```{r, df_print = "paged"}
+x
+percent_rank(x)
+```
+
+it is computed by rescaling the results of `min_rank()` to [0, 1]
+
+```{r, df_print = "paged"}
+min_rank(x)
+(min_rank(x) - min(min_rank(x))) / 
+  (max(min_rank(x)) - min(min_rank(x)))
+```
+
+For both there are repeated ranks while the idea of missing ones obviously loses meaning here.
+
+One difference between the two is that `cume_dist()` will never have a rank equal to 0.
+
+`ntile()` divides the vector in `n` different groups. `n` must be a single positive integer.
+
+```{r, df_print = "paged"}
+x
+ntile(x, n = 2)
+```
+
+The maximum difference in group sizes is 1 and, when the output requires groups of different sizes, the assignment of elements to groups is performed in such a way that larger groups obtain higher ranks.
+
+```{r, df_print = "paged"}
+sort(c(x, x))
+ntile(sort(c(x, x)), n = 3)
+```
+
+From these examples we can see that the same value (2 in this case) can be assigned to different groups.
+
+When `n` (that can be implicit) is greater than the number of elements in the vector, `ntile()` will have groups of size 1.
+
+```{r, df_print = "paged"}
+ntile(x, 10)
+```
+
+When used on a data frame the default of its first argument is `row_number()`, so, if we don't input one, `ntile()` will use the row indexes to create the groups.
+
+```{r}
+df %>%
+  slice(1:8) %>%
+  mutate(group = ntile(n = 4))
+df %>%
+  slice(1:8) %>%
+  mutate(group = ntile(row_number(), n = 4))
+```
+
+`n` must be explicit in these cases.
+
+```{r, error = TRUE}
+df %>%
+  slice(1:8) %>%
+  mutate(group = ntile(4))
+```
+
+As just seen, inside a data frame `row_number()` can in fact also be used without an argument.
+In this case the "column" it will use to rank is the row indexes (the same implicit column it uses to resolve ties).
+
+```{r}
+df %>%
+  arrange(row_number())
+df %>%
+  filter(between(row_number(), 1, 10))
+```
+
+As the name suggests, we can use `ntile(`) to filter by quantiles, especially with databases where there's no median function.
+
+```{r, df_print = "paged"}
+x
+median(x)
+ntile(x, 2) == 2
+x[ntile(x, 2) == 2]
+```
+
+With these functions we can rank directly on expressions.
+
+```{r, df_print = "paged"}
+(x / 2 - sqrt(x)) ^ 2
+row_number((x / 2 - sqrt(x)) ^ 2)
+min_rank((x / 2 - sqrt(x)) ^ 2)
+dense_rank((x / 2 - sqrt(x)) ^ 2)
+cume_dist((x / 2 - sqrt(x)) ^ 2)
+percent_rank((x / 2 - sqrt(x)) ^ 2)
+ntile((x / 2 - sqrt(x)) ^ 2, 2)
+```
+
+Besides numbers, we can rank also on strings
+
+```{r, df_print = "paged"}
+(y <- c("a", "b", "b", "c"))
+row_number(y)
+min_rank(y)
+dense_rank(y)
+cume_dist(y)
+percent_rank(y)
+ntile(y, 2)
+```
+
+and dates.
+
+```{r, df_print = "paged"}
+(z <- as.Date(c("1900-11-24", "2001-10-18", "2001-10-18", "2004-05-28")))
+row_number(z)
+min_rank(z)
+dense_rank(z)
+cume_dist(z)
+percent_rank(z)
+ntile(z, 2)
+```
+
+With these functions NAs are ranked with an NA.
+
+```{r, df_print = "paged"}
+(xNA <- c(1, 2, NA, 2, 3))
+row_number(xNA)
+min_rank(xNA)
+dense_rank(xNA)
+cume_dist(xNA)
+percent_rank(xNA)
+ntile(xNA, 2)
+```
+
+## - *usage with a data frame*
+
+The ranks outputted by all these functions can be used to arrange the rows of a data frame by the values of the elements of a column.
+
+```{r}
+df %>%
+  arrange(row_number(Quantity))
+```
+
+When using `row_number()`, we may want to use `arrange()` before ranking if the original row indexes, that are used to resolve ties, don't satisfy us (rows 4 and 5 shift place here).
+
+```{r}
+df %>%
+  arrange(desc(StockCode)) %>%
+  arrange(row_number(Quantity))
+```
+
+Using a ranking function with `arrange(`) is not, however, different from a direct `arrange()` call.
+
+```{r, df_print = "paged"}
+identical(df %>%
+            arrange(Quantity),
+          df %>%
+            arrange(row_number(Quantity)))
+```
+
+They are therefore more useful if we store the ranks in a column with `mutate()`.
+
+```{r}
+df %>%
+  mutate(Quantity_Ranks = row_number(Quantity), .keep = "used")
+```
+
+Column that can be used to filter for a rank of choice.
+
+```{r}
+df %>%
+  mutate(Quantity_Ranks = row_number(Quantity)) %>%
+  filter(Quantity_Ranks == 5)
+```
+
+An operation than can be done also directly without an intermediary `mutate()` call.
+
+```{r}
+df %>%
+  filter(row_number(Quantity) == 5)
+```
+
+## - *possible issues when filtering*
+
+We need to pay attention in choosing the ranking functions when filtering as they don't all return the same results.
+
+```{r}
+df %>%
+  filter(min_rank(Quantity) == 5)
+```
+
+`min_rank()` in fact returns 0 rows as the fifth rank is missing by the way ties influence the output.
+
+```{r}
+df %>%
+  mutate(Ranks = min_rank(Quantity), .keep = "used") %>%
+  arrange(Ranks)
+```
+
+And, for the same reason, `dense_rank()` returns another row compared to `row_number()`.
+
+```{r}
+df %>% 
+  filter(dense_rank(Quantity) == 5)
+df %>%
+  mutate(Ranks = dense_rank(Quantity), .keep = "used") %>%
+  arrange(Ranks)
+```
+
+## - *dissimilar total numbers of ranks*
+
+Another difference between the three functions is the total number of ranks they output which stems by how the ranks are augmented in case of ties.
+
+```{r}
+bind_cols("Price" = sort(df$Price)[1:1606],
+          df %>%
+            count(rank_from_row_number = row_number(Price), name = "row_number_#_of_elements") %>%
+            slice(1:1606),
+          "Price_unique_values" = sort(unique(df$Price)),
+          df %>%
+            count(rank_from_min_rank = min_rank(Price), name = "min_rank_#_of_elements"),
+          df %>%
+            count(rank_from_dense_rank = dense_rank(Price), name = "dense_rank_#_of_elements"))
+```
+
+As `row_number()` uses one rank for each element of the column it evaluates, its total number of ranks will be equal to the number of elements.
+
+```{r, df_print = "paged"}
+nrow(count(df, row_number(Price)))
+```
+```{r}
+bind_cols("Price" = sort(df$Price),
+          df %>%
+            count(rank_from_row_number = row_number(Price), name = "row_number_#_of_elements"))
+```
+
+For `min_rank()` and `dense_rank()` instead their total number of ranks will be equal to the total number of unique elements, as elements with the same value get the same rank.
+
+```{r, df_print = "paged"}
+nrow(count(df, min_rank(Price)))
+nrow(count(df, dense_rank(Price)))
+```
+```{r}
+bind_cols("Price_unique_values" = sort(unique(df$Price)),
+          df %>%
+            count(rank_from_min_rank = min_rank(Price), name = "min_rank_#_of_elements"),
+          df %>%
+            count(rank_from_dense_rank = dense_rank(Price), name = "dense_rank_#_of_elements"))
+```
+
+## - *dissimilar last rank*
+
+The last rank they output is also different, as using `row_number()` or `min_rank()` it is equal to the total number of non NAs values (bar ties) whereas using `dense_rank()` it is equal to the total number of unique non NAs values, which is usually less, and sometimes we might prefer to have a smaller and more manageable number of ranks.
+
+```{r}
+df %>%
+  group_by(rank_from_row_number = row_number(Price)) %>% 
+  group_by(rank_from_min_rank = min_rank(Price)) %>%
+  group_by(rank_from_dense_rank = dense_rank(Price)) %>%
+  ungroup() %>%
+  select(Price, (ncol(df) + 1):ncol(.)) %>%
+  arrange(desc(Price), desc(rank_from_row_number))
+```
+
+## - *breaking ties*
+
+To break ties we can use several columns, the same logic we use with `arrange()`.
+
+```{r}
+df %>%
+  arrange(Quantity)
+df %>%
+  arrange(Quantity, desc(InvoiceDate))
+```
+
+We have to use `pick()` to select the columns.
+
+```{r}
+df %>% 
+  mutate(Rank = dense_rank(pick(Quantity, InvoiceDate)), .keep = "used") %>%
+  arrange(Rank)
+```
+
+Without the second column we would have had the rank 4 two times.
+
+```{r}
+df %>% 
+  mutate(Rank = dense_rank(Quantity), .keep = "used") %>%
+  arrange(Rank)
+```
+
+But using two columns the ranks from the second one are used to break the ties of the first.
+
+```{r}
+df %>% 
+  mutate(across(c(Quantity, InvoiceDate), dense_rank, .names = "Rank_{.col}"), .keep = "used") %>% 
+  arrange(Rank_Quantity, Rank_InvoiceDate)
+```
+
+We can also create a logical column to filter on.
+
+```{r}
+df %>%
+  mutate(Good_Rank = row_number(Quantity) == 5) %>%
+  filter(Good_Rank)
+```
+
+`cume_dist()` and `percent_rank()` must be used differently, as it would be very hard to guess an exact percentage to filter for, so we usually use them with comparisons.
+
+```{r}
+df %>%
+  filter(cume_dist(Quantity) < 0.1)
+df %>%
+  filter(percent_rank(Quantity) < 0.1)
+```
+
+With `ntile()` we decide both the number of groups and the groups we are looking for.
+
+```{r}
+df %>%
+  filter(ntile(Quantity, 400) == 50)
+df %>%
+  filter(ntile(Quantity, 400) > 50)
+```
+
+As we've seen before, we can use `ntile()` to filter by quantiles.
+
+```{r}
+df %>%
+  filter(ntile(Quantity, 2) == 2)
+```
+
+We can use `desc()` or a minus (`-`) in case we want to invert the default ranking behavior that assigns higher ranks to smaller values.
+
+```{r}
+df %>% 
+  mutate(row_number(desc(Quantity)), .keep = "used")
+df %>% 
+  mutate(row_number(-(Quantity)), .keep = "used")
+```
+
+It doesn't work for `row_number()` without an argument though, it doesn't invert the order of row indexes.
+
+```{r, error = TRUE}
+df %>%
+  filter(row_number(desc()) == 5)
+```
+
+This can be solved using a turnaround.
+
+```{r}
+df %>%
+  filter(row_number() == n() - 5) 
+```
+
+Or more simply with `slice()`.
+
+```{r}
+df %>%
+  slice(n() - 5)
+```
+
+## - *similarities with arrange() plus slice()*
+
+With a combination of `arrange()` plus `slice()` we can in fact replicate, with some caveats, the results of filtering using ranking functions.
+
+```{r}
+df %>%
+  filter(row_number(Quantity) == 5)
+df %>%
+  arrange(Quantity) %>% 
+  slice(5)
+```
+
+We have less control over the ties though, so a ranking function is preferable.
+
+This example shows it well, as `slice()` cuts to the 8th row while `filter()` includes all the rows tied with a value of 10000.
+
+```{r}
+df %>%
+  arrange(desc(Quantity)) %>%
+  slice(1:8)
+df %>%
+  filter(min_rank(desc(Quantity)) <= 8)
+```
+
+Notice as well how the code with `filter()` doesn't modify the rows' order.
+
+`slice(`) has some helpers though, `slice_max()` and `slice_min()`, that are better at dealing with ties.
+
+```{r}
+df %>%
+  filter(min_rank(desc(Quantity)) <= 8)
+df %>%
+  slice_max(Quantity, n = 8)
+df %>%
+  slice_max(Quantity, n = 8, with_ties = FALSE)
+```
+
+## - *with group_by()*
+
+With grouped data frames we get the expected results of a selected number of rows per group.
+
+```{r}
+df %>% 
+  group_by(Country) %>%
+  filter(row_number() == 5)
+df %>% 
+  group_by(Country) %>%
+  filter(row_number(Quantity) == 5)
+df %>%
+  group_by(Country) %>%
+  filter(min_rank(Quantity) == 5)
+df %>% 
+  group_by(Country) %>%
+  filter(dense_rank(Quantity) == 5)
+df %>%
+  group_by(Country) %>%
+  filter(cume_dist(Quantity) < 0.1)
+df %>%
+  group_by(Country) %>%
+  filter(percent_rank(Quantity) < 0.1)
+df %>%
+  group_by(Country) %>%
+  filter(ntile(Quantity, 5) == 5)
+```
+
+This behavior is not one to one with `arrange()` plus `slice()` as `slice()` sorts the rows by the grouping columns.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  arrange(Quantity) %>%
+  slice(5)
+```
+
+The behavior is as expected also with `mutate()`.
+
+```{r}
+df %>%
+  group_by(Country) %>%
+  mutate(Row_Index = row_number(), .keep = "used")
+df %>%
+  group_by(Country) %>%
+  mutate(Quantity_Ranks = row_number(Quantity), .keep = "used")
+```
