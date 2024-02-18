@@ -52,6 +52,8 @@ https://archive.ics.uci.edu/ml/datasets/Online+Retail+II
 
 and I chose it primarily for a personal convenience as I was already using it for another project of mine.
 
+A little warning; some examples rely on a subset of the data frame, so, at a first glance, it might seem like there is a code chunk not relevant to the topic at hand (the first of those is in the `filter()` page, where I explained how the function treats NAs. To do so, I used the subset of only the 10123G Stock Code).
+
 # - *SHORTCOMINGS*
 
 In some pages (the one for `filter()` for example) the side menu has too many elements, so the last ones can't be accessed and the only solution is to scroll to the end of the page. I apologize for that.
