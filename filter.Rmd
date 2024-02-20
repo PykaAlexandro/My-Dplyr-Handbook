@@ -203,7 +203,7 @@ df %>%
 
 # - *near()*
 
-With `near()`, that accepts only numerical columns instead, we can filter using a tolerance.
+With `near()`, that accepts only numerical columns instead, we can filter using a chosen tolerance.
 
 ```{r}
 df %>%
@@ -211,6 +211,14 @@ df %>%
 df %>%
   slice(1:4) %>%
   filter(near(Price, 6, tol = 1))
+```
+
+The default value for the `tol` argument is 0.
+
+```{r}
+df %>%
+  slice(1:4) %>%
+  filter(near(Price, 6.95))
 ```
 
 We can use one value or a vector of several.
