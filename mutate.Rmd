@@ -90,7 +90,7 @@ df %>%
 ```
 
 `mutate()` permits a high degree of columns manipulation and it can be used with a vast variety of functions.
-Here for example we are interested in knowing what is more expensive, the squared or the doubled price, for every item.
+Here for example we are interested in knowing which value is higher, the squared or the doubled one, for every element of the `Price` column.
 
 ```{r}
 df %>%
@@ -100,7 +100,8 @@ df %>%
 ```
 
 In these previous examples we used calculations that are vectorized.
-Vectorized operations are performed element-wise, meaning that the calculation is performed between elements that share the same position/row index and we get a result for every position.
+
+Vectorized operations are performed element-wise, meaning that the calculation is performed between elements that share the same position (row index in a data frame), getting as many results as the number of them.
 
 ```{r, df_print = "paged"}
 c(1, 2, 3) * c(1, 2, 3)
