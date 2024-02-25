@@ -203,7 +203,7 @@ df %>%
 
 As without them `select()` will throw a warning.
 
-```{r}
+```{r, warning = TRUE}
 df %>%
   select(cols_vec)
 ```
@@ -243,7 +243,7 @@ df %>%
 
 As before, when there are no columns matching the condition, `select()` returns 0 rows instead of an error.
 
-`num_range()` has the optional arguments `width`, with which we can account for a serie of 0s before the actual number (like if the columns were named `Description001`, `Description002`, ... , we would use a `width` of 3) and `vars`.   
+`num_range()` has the optional arguments `width`, with which we can account for a serie of 0s before the actual number (like if the columns were named `Description001`, `Description002`, ... , we would use a `width` of 3), and `vars`, which works as in `select()`.   
 Furthermore, we can specify `suffix =` if the columns were named `1Description`, `2Description`, ... ,
 
 ## - *last_col()*
@@ -273,7 +273,7 @@ df %>%
   select(where(is.character))
 ```
 
-We can rewrite those expressions in different ways; with an anonymous function,
+We can rewrite those expressions in different ways: with an anonymous function,
 
 ```{r}
 df %>% 
@@ -509,7 +509,7 @@ df %>%
   relocate(CustomerID = `Customer ID`)
 ```
 
-The optional arguments can utilize `where()` as well.
+Also the optional arguments can utilize `where()`.
 
 ```{r}
 df %>% 
