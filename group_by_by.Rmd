@@ -322,10 +322,12 @@ df %>%
   summarise(Avg_Price = mean(Price))
 ```
 
-This can produce a table that is more informative than the one without `Description` (the values in the `Avg_Price` column are different as here we use values that we removed with `group_by(StockCode) %>% slice(1)` in the previous example).
+This can produce a table that is more informative than the one without `Description`.
 
 ```{r}
 df %>%
+  group_by(StockCode) %>%
+  slice(1) %>%
   group_by(StockCode) %>%
   summarise(Avg_Price = mean(Price))
 ```
