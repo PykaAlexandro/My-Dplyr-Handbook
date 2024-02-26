@@ -288,7 +288,8 @@ df %>%
 df %>%
   slice(1:100) %>%
   group_by(Country) %>%
-  group_walk(~ plot(.x$Quantity))
+  group_walk(~ plot(.x$Quantity)) %>%
+  group_map(~ mean(.x$Quantity))
 ```
 
 In all of these past examples `.x` referred to the object, that is the grouped data frame, that was piped into one of these three `group_*` functions but we can use `.y` as well when we want to refer to the grouping columns.
