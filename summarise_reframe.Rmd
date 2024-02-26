@@ -541,7 +541,7 @@ Counts and proportions of logical values can be done also without `any()` and `a
 df %>%
   summarise(Tot_N_Invoices = n_distinct(Invoice),
             N_Expensive_Items = sum(Price > 100),
-            Prop_of_Expensive_Items = mean(Price > 100))
+            Prop_of_Expensive_Items = formattable::percent(mean(Price > 100)))
 ```
 
 Another use of `summarise()` it to have the same calculation performed on two different sets thank to inline subsetting.
