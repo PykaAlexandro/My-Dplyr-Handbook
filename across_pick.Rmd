@@ -650,7 +650,7 @@ df %>%
   mutate(across(c(Quantity, Price)))
 ```
 
-For these tasks is better to use `pick()` though, because, being that its only purpose, we can list columns without wrapping them in `c()`.
+For these tasks though is better to use `pick()` because, it being designed for them, we can list columns without wrapping them in `c()`.
 
 ```{r}
 df %>% 
