@@ -255,6 +255,9 @@ When specified, after a `summarise()` call they will be kept and used as `group_
 
 ```{r}
 df %>%
+  rowwise() %>%
+  summarise(Quantity_plus_Price = sum(c(Quantity, Price)))
+df %>%
   rowwise(`Customer ID`) %>%
   summarise(Quantity_plus_Price = sum(c(Quantity, Price)))
 df %>%
