@@ -104,7 +104,7 @@ if_else(xNA == 1, "1", "not1")
 
 # - *missing*
 
-We can change that with the `missing` argument thought, whose value must be of the same type of the other two classes.
+We can change that with the `missing` argument, whose value must be of the same type of the other two classes.
 
 ```{r, df_print = "paged"}
 if_else(xNA == 1, "1", "not1", missing = "other")
@@ -153,6 +153,7 @@ if_else(x == 1, TRUE, FALSE, ptype = integer())
 And with the `size` one its length, but I don't understand how it is supposed to function.
 
 ```{r, error = TRUE, df_print = "paged"}
+if_else(x == 1, TRUE, FALSE, size = 2)
 if_else(x == 1, TRUE, FALSE, size = 8)
 if_else(x[1] == 1, TRUE, FALSE, size = 4)
 ```

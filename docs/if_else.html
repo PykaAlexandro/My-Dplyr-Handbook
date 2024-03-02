@@ -653,8 +653,8 @@ that satisfy the TRUE and FALSE outputs.</p>
 </div>
 <div id="missing" class="section level1">
 <h1>- <em>missing</em></h1>
-<p>We can change that with the <code>missing</code> argument thought,
-whose value must be of the same type of the other two classes.</p>
+<p>We can change that with the <code>missing</code> argument, whose
+value must be of the same type of the other two classes.</p>
 <div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">if_else</span>(xNA <span class="sc">==</span> <span class="dv">1</span>, <span class="st">&quot;1&quot;</span>, <span class="st">&quot;not1&quot;</span>, <span class="at">missing =</span> <span class="st">&quot;other&quot;</span>)</span></code></pre></div>
 <pre><code>## [1] &quot;1&quot;     &quot;not1&quot;  &quot;not1&quot;  &quot;not1&quot;  &quot;other&quot;</code></pre>
 <p>It is important to pay attention to NAs, as they can be evaluated to
@@ -693,10 +693,13 @@ output.</p>
 <h1>- <em>size</em></h1>
 <p>And with the <code>size</code> one its length, but I don’t understand
 how it is supposed to function.</p>
-<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="fu">if_else</span>(x <span class="sc">==</span> <span class="dv">1</span>, <span class="cn">TRUE</span>, <span class="cn">FALSE</span>, <span class="at">size =</span> <span class="dv">8</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="fu">if_else</span>(x <span class="sc">==</span> <span class="dv">1</span>, <span class="cn">TRUE</span>, <span class="cn">FALSE</span>, <span class="at">size =</span> <span class="dv">2</span>)</span></code></pre></div>
+<pre><code>## Error in `if_else()`:
+## ! `condition` must have size 2, not size 4.</code></pre>
+<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="fu">if_else</span>(x <span class="sc">==</span> <span class="dv">1</span>, <span class="cn">TRUE</span>, <span class="cn">FALSE</span>, <span class="at">size =</span> <span class="dv">8</span>)</span></code></pre></div>
 <pre><code>## Error in `if_else()`:
 ## ! `condition` must have size 8, not size 4.</code></pre>
-<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="fu">if_else</span>(x[<span class="dv">1</span>] <span class="sc">==</span> <span class="dv">1</span>, <span class="cn">TRUE</span>, <span class="cn">FALSE</span>, <span class="at">size =</span> <span class="dv">4</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="fu">if_else</span>(x[<span class="dv">1</span>] <span class="sc">==</span> <span class="dv">1</span>, <span class="cn">TRUE</span>, <span class="cn">FALSE</span>, <span class="at">size =</span> <span class="dv">4</span>)</span></code></pre></div>
 <pre><code>## Error in `if_else()`:
 ## ! `condition` must have size 4, not size 1.</code></pre>
 </div>
@@ -704,11 +707,11 @@ how it is supposed to function.</p>
 <h1>- <em>usage with a data frame</em></h1>
 <p>With a data frame, <code>if_else()</code> is useful to create new
 columns.</p>
-<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>EU <span class="ot">&lt;-</span>  <span class="fu">c</span>(<span class="st">&quot;Austria&quot;</span>, <span class="st">&quot;Belgium&quot;</span>, <span class="st">&quot;Channel Islands&quot;</span>, <span class="st">&quot;Cyprus&quot;</span>, <span class="st">&quot;Denmark&quot;</span>, <span class="st">&quot;EIRE&quot;</span>, <span class="st">&quot;Finland&quot;</span>, <span class="st">&quot;France&quot;</span>, <span class="st">&quot;Germany&quot;</span>, </span>
-<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a>         <span class="st">&quot;Greece&quot;</span>, <span class="st">&quot;Iceland&quot;</span>, <span class="st">&quot;Italy&quot;</span>, <span class="st">&quot;Lithuania&quot;</span>, <span class="st">&quot;Malta&quot;</span>, <span class="st">&quot;Netherlands&quot;</span>, <span class="st">&quot;Norway&quot;</span>, <span class="st">&quot;Poland&quot;</span>, <span class="st">&quot;Portugal&quot;</span>, </span>
-<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a>         <span class="st">&quot;Spain&quot;</span>, <span class="st">&quot;Sweden&quot;</span>, <span class="st">&quot;Switzerland&quot;</span>)</span></code></pre></div>
-<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
-<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">in_EU =</span> <span class="fu">if_else</span>(Country <span class="sc">%in%</span> EU, <span class="cn">TRUE</span>, <span class="cn">FALSE</span>), <span class="at">.keep =</span> <span class="st">&quot;used&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb37"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>EU <span class="ot">&lt;-</span>  <span class="fu">c</span>(<span class="st">&quot;Austria&quot;</span>, <span class="st">&quot;Belgium&quot;</span>, <span class="st">&quot;Channel Islands&quot;</span>, <span class="st">&quot;Cyprus&quot;</span>, <span class="st">&quot;Denmark&quot;</span>, <span class="st">&quot;EIRE&quot;</span>, <span class="st">&quot;Finland&quot;</span>, <span class="st">&quot;France&quot;</span>, <span class="st">&quot;Germany&quot;</span>, </span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a>         <span class="st">&quot;Greece&quot;</span>, <span class="st">&quot;Iceland&quot;</span>, <span class="st">&quot;Italy&quot;</span>, <span class="st">&quot;Lithuania&quot;</span>, <span class="st">&quot;Malta&quot;</span>, <span class="st">&quot;Netherlands&quot;</span>, <span class="st">&quot;Norway&quot;</span>, <span class="st">&quot;Poland&quot;</span>, <span class="st">&quot;Portugal&quot;</span>, </span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a>         <span class="st">&quot;Spain&quot;</span>, <span class="st">&quot;Sweden&quot;</span>, <span class="st">&quot;Switzerland&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb38"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">in_EU =</span> <span class="fu">if_else</span>(Country <span class="sc">%in%</span> EU, <span class="cn">TRUE</span>, <span class="cn">FALSE</span>), <span class="at">.keep =</span> <span class="st">&quot;used&quot;</span>)</span></code></pre></div>
 <div class="info">
 <div class="tibble-info">
 A tibble: 525461 x 2
@@ -722,16 +725,15 @@ A tibble: 525461 x 2
 <p>It is important that the output of <code>if_else()</code> is either
 of length 1 or of the same size as the number of rows of the data frame,
 otherwise we would get an error.</p>
-<div class="sourceCode" id="cb37"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
-<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">is_EU =</span> <span class="fu">if_else</span>(EU <span class="sc">%in%</span> Country, <span class="cn">TRUE</span>, <span class="cn">FALSE</span>))</span></code></pre></div>
+<div class="sourceCode" id="cb39"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">is_EU =</span> <span class="fu">if_else</span>(EU <span class="sc">%in%</span> Country, <span class="cn">TRUE</span>, <span class="cn">FALSE</span>))</span></code></pre></div>
 <pre><code>Error in `mutate()`:
-ℹ In argument: `is_EU = if_else(EU %in% Country, TRUE,
-  FALSE)`.
+ℹ In argument: `is_EU = if_else(EU %in% Country, TRUE, FALSE)`.
 Caused by error:
 ! `is_EU` must be size 525461 or 1, not 21.</code></pre>
 <p>The test can be specified with expressions.</p>
-<div class="sourceCode" id="cb39"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
-<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">High_Rank_Price =</span> <span class="fu">if_else</span>(<span class="fu">min_rank</span>(Price) <span class="sc">&lt;</span> <span class="dv">4</span>, <span class="cn">TRUE</span>, <span class="cn">FALSE</span>), <span class="at">.keep =</span> <span class="st">&quot;used&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb41"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">High_Rank_Price =</span> <span class="fu">if_else</span>(<span class="fu">min_rank</span>(Price) <span class="sc">&lt;</span> <span class="dv">4</span>, <span class="cn">TRUE</span>, <span class="cn">FALSE</span>), <span class="at">.keep =</span> <span class="st">&quot;used&quot;</span>)</span></code></pre></div>
 <div class="info">
 <div class="tibble-info">
 A tibble: 525461 x 2
@@ -750,11 +752,11 @@ with specific ones the output may vary between groups.</p>
 <p>For instance a <code>Price</code> of 4.25 is in the following example
 labeled as “Expensive” for Germany (row 32) but not for United
 Kingdom.</p>
-<div class="sourceCode" id="cb40"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
-<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(Country) <span class="sc">%&gt;%</span></span>
-<span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">Local_Avg_Price =</span> <span class="fu">mean</span>(Price),</span>
-<span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a>         <span class="at">Exp_Item =</span> <span class="fu">if_else</span>(Price <span class="sc">&gt;</span> <span class="fu">mean</span>(Price), <span class="st">&quot;Expensive&quot;</span>, <span class="st">&quot;Not Expensive&quot;</span>), <span class="at">.keep =</span> <span class="st">&quot;used&quot;</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb40-5"><a href="#cb40-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="fu">between</span>(Price, <span class="fl">4.189418</span>, <span class="fl">4.543470</span>))</span></code></pre></div>
+<div class="sourceCode" id="cb42"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
+<span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(Country) <span class="sc">%&gt;%</span></span>
+<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">Local_Avg_Price =</span> <span class="fu">mean</span>(Price),</span>
+<span id="cb42-4"><a href="#cb42-4" aria-hidden="true" tabindex="-1"></a>         <span class="at">Exp_Item =</span> <span class="fu">if_else</span>(Price <span class="sc">&gt;</span> <span class="fu">mean</span>(Price), <span class="st">&quot;Expensive&quot;</span>, <span class="st">&quot;Not Expensive&quot;</span>), <span class="at">.keep =</span> <span class="st">&quot;used&quot;</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb42-5"><a href="#cb42-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="fu">between</span>(Price, <span class="fl">4.189418</span>, <span class="fl">4.543470</span>))</span></code></pre></div>
 <div class="info">
 <div class="tibble-info">
 A tibble: 20476 x 4
