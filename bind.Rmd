@@ -240,7 +240,7 @@ bind_cols(df_first_cols,
 
 # - *with group_by()*
 
-In case of grouped data frame, the output will inherit the groups of the first one.
+In case of grouped data frames, the output will inherit the groups of the first one.
 
 ```{r}
 bind_rows(df_first_rows %>%
