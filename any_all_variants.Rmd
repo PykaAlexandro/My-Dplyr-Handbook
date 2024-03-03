@@ -613,7 +613,7 @@ df %>%
   filter(if_any(c(Quantity, Price), ~ .x >= 10 & .x <= 20))
 ```
 
-By design though they don't understand `cur_column()` so if we want to filter each column for a different value,
+By design though they don't understand `cur_column()` (an `across()` specific function) so if we want to filter each column for a different value,
 
 ```{r}
 df %>%
