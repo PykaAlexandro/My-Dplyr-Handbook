@@ -626,10 +626,10 @@ div.tocify {
 }
 </style>
 <p>When applying a verb to a grouped data frame, the rows’ order of the
-output can be modified, most frequently by arranging them by the
-grouping columns. The grouping columns can be retrieved at any time
-using <code>group_keys()</code>, a grouped data frames utility
-function.</p>
+output can be different from the input’s one, as most frequently it is
+re-arranged by the grouping columns. Grouping columns that can be
+retrieved at any time using <code>group_keys()</code>, a grouped data
+frames utility function.</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>df <span class="sc">%&gt;%</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(Country) <span class="sc">%&gt;%</span></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_keys</span>()</span></code></pre></div>

@@ -63,7 +63,7 @@ library(readxl)
 df <- read_excel(here::here("online_retail_II.xlsx"))
 ```
 
-When applying a verb to a grouped data frame, the rows' order of the output can be modified, most frequently by arranging them by the grouping columns. The grouping columns can be retrieved at any time using `group_keys()`, a grouped data frames utility function.
+When applying a verb to a grouped data frame, the rows' order of the output can be different from the input's one, as most frequently it is re-arranged by the grouping columns. Grouping columns that can be retrieved at any time using `group_keys()`, a grouped data frames utility function.
 
 ```{r}
 df %>%
